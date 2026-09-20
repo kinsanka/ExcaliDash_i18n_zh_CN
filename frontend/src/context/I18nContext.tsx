@@ -1,8 +1,10 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { enUS, zhCN } from "date-fns/locale";
+import { useOptionalPreferences } from "./PreferencesContext";
 import {
   LANGUAGE_STORAGE_KEY,
   getCurrentLanguage,
+  getLanguageStorage,
   translations,
   type TranslationParams,
   type TranslationValue,
@@ -38,14 +40,27 @@ const detectLanguage = (): Language => getCurrentLanguage();
 const I18nContext = createContext<I18nContextValue | null>(null);
 
 export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [language, setLanguageState] = useState<Language>(detectLanguage);
+  const preferencesContext = useOptionalPreferences();
+  const [localLanguage, setLocalLanguage] = useState<string>(detectLanguage);
+  const storedLanguage =
+    preferencesContext?.preferences.language ?? localLanguage;
+  const language: Language = storedLanguage === "zh-CN" ? "zh-CN" : "en";
+  const setStoredLanguage = useCallback(
+    (nextLanguage: string) => {
+      setLocalLanguage(nextLanguage);
+      preferencesContext?.setPreference("language", nextLanguage);
+    },
+    [preferencesContext],
+  );
 
   useEffect(() => {
     if (typeof document !== "undefined") {
       document.documentElement.lang = language;
     }
-    window.localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
-  }, [language]);
+    const storage = getLanguageStorage();
+    storage?.setItem(LANGUAGE_STORAGE_KEY, language);
+    storage?.setItem("excalidash-lang", storedLanguage);
+  }, [language, storedLanguage]);
 
   const value = useMemo<I18nContextValue>(() => {
     const dictionary = translations[language] as Record<string, TranslationValue>;
@@ -55,14 +70,15 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return {
       language,
-      setLanguage: setLanguageState,
-      toggleLanguage: () => setLanguageState((current) => (current === "zh-CN" ? "en" : "zh-CN")),
+      setLanguage: (nextLanguage) => setStoredLanguage(nextLanguage),
+      toggleLanguage: () =>
+        setStoredLanguage(language === "zh-CN" ? "en" : "zh-CN"),
       t,
       isChinese: language === "zh-CN",
       dateLocale: language === "zh-CN" ? zhCN : enUS,
       excalidrawLangCode: language === "zh-CN" ? "zh-CN" : "en-US",
     };
-  }, [language]);
+  }, [language, setStoredLanguage]);
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 };

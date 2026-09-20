@@ -14,7 +14,6 @@ const sleepSync = (ms: number) => {
   const shared = new Int32Array(new SharedArrayBuffer(4));
   Atomics.wait(shared, 0, 0, ms);
 };
-
 const withDbPushLock = (fn: () => void) => {
   const start = Date.now();
   let fd: number | null = null;
@@ -90,6 +89,7 @@ export const setupTestDb = () => {
  * Clean up the test database between tests
  */
 export const cleanupTestDb = async (prisma: PrismaClient) => {
+  await prisma.apiKey.deleteMany({});
   await prisma.drawing.deleteMany({});
   await prisma.collection.deleteMany({});
 };
@@ -135,7 +135,7 @@ export const initTestDb = async (prisma: PrismaClient) => {
  * Generate a sample base64 PNG image data URL
  * This creates a small but valid PNG for testing
  */
-export const generateSampleImageDataUrl = (size: "small" | "medium" | "large" = "small"): string => {
+const generateSampleImageDataUrl = (size: "small" | "medium" | "large" = "small"): string => {
   const smallPng = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
   
   if (size === "small") {

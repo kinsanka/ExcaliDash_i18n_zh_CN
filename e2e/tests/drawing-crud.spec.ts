@@ -55,7 +55,7 @@ test.describe("Drawing Creation", () => {
 
     const drawing = await getDrawing(request, drawingId);
     expect(drawing).toBeDefined();
-    expect(drawing.name).toBe("New Drawing");
+    expect(drawing.name).toBe("Untitled Drawing");
   });
 
   test("should open existing drawing in editor", async ({ page, request }) => {

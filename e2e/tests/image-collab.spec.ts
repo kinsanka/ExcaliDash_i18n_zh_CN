@@ -1,4 +1,4 @@
-import { test, expect, type BrowserContext } from "@playwright/test";
+import { test, expect, type BrowserContext, type Page } from "@playwright/test";
 import { createDrawing, deleteDrawing, getDrawing, updateDrawing } from "./helpers/api";
 
 /**

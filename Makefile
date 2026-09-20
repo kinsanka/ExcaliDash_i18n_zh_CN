@@ -1,10 +1,12 @@
 .PHONY: help install dev build test test-frontend test-backend test-e2e test-e2e-docker \
-        lint lint-frontend lint-backend clean docker-build docker-run docker-down docker-logs \
+        lint lint-frontend lint-backend check clean docker-build docker-run docker-down docker-logs \
+        lab-build lab-up lab-down lab-reset lab-status lab-logs lab-smoke lab-open \
         release pre-release version-bump changelog changelog-open changelog-keep db-migrate db-reset
 
 DOCKER_USERNAME := zimengxiong
 IMAGE_NAME := excalidash
 VERSION := $(shell cat VERSION 2>/dev/null || echo "0.0.0")
+LAB_COMPOSE := docker compose -f docker-compose.lab.yml
 
 .DEFAULT_GOAL := help
 
@@ -15,15 +17,17 @@ help: ## Show this help message
 	echo "$$UNDERLINE|"
 	@echo "Usage: make [target]"
 	@echo "Development:"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '(install|dev|build|lint|clean)' | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-20s %s\n", $$1, $$2}'
+	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '(install|dev|build|lint|clean)' | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-20s %s\n", $$1, $$2}'
 	@echo "Testing:"
-	@grep -E '^test[-a-zA-Z0-9_]*:.*## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-20s %s\n", $$1, $$2}'
+	@grep -hE '^test[-a-zA-Z0-9_]*:.*## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-20s %s\n", $$1, $$2}'
 	@echo "Docker:"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '(docker)' | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-20s %s\n", $$1, $$2}'
+	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '(docker)' | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-20s %s\n", $$1, $$2}'
+	@echo "Environment lab:"
+	@grep -hE '^lab[-a-zA-Z0-9_]*:.*## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-20s %s\n", $$1, $$2}'
 	@echo "Release:"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '(release|version|changelog)' | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-20s %s\n", $$1, $$2}'
+	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '(release|version|changelog)' | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-20s %s\n", $$1, $$2}'
 	@echo "Database:"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '(db-)' | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-20s %s\n", $$1, $$2}'
+	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '(db-)' | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-20s %s\n", $$1, $$2}'
 	@echo "Current version: $(VERSION)"
 
 install: ## Install all dependencies (frontend, backend, e2e)
@@ -114,6 +118,12 @@ lint-frontend: ## Run frontend linter
 lint-backend: ## Run backend linter (if available)
 	@echo "Backend linting not configured"
 
+check: ## Run repo checks (max source line count + env boundary)
+	@echo "Running repo checks..."
+	cd backend && npm run check:max-lines
+	cd backend && npm run check:env-boundary
+	@echo "Repo checks passed."
+
 clean: ## Clean build artifacts and node_modules
 	@echo "Cleaning build artifacts..."
 	rm -rf frontend/dist
@@ -199,6 +209,51 @@ docker-restart: docker-down docker-run ## Restart Docker containers
 
 docker-rebuild: docker-down docker-build docker-run ## Rebuild and restart containers
 
+lab-build: ## Build reproducible local environment lab images
+	$(LAB_COMPOSE) build
+
+lab-up: ## Start all reproducible lab environments on ports 1101-1105
+	$(LAB_COMPOSE) up -d --build
+	@echo ""
+	@echo "ExcaliDash lab is starting:"
+	@echo "  basic local auth:       http://localhost:1101"
+	@echo "  basic + SeaweedFS S3:   http://localhost:1102"
+	@echo "  OIDC enforced:          http://localhost:1103"
+	@echo "  hybrid auth:            http://localhost:1104"
+	@echo "  trusted proxy variant:  http://localhost:1105"
+	@echo "  Keycloak admin:         http://localhost:18080/admin"
+	@echo "  SeaweedFS filer:        http://localhost:18888"
+	@echo "  SeaweedFS S3 endpoint:  http://localhost:18333"
+	@echo ""
+	@echo "Run 'make lab-smoke' once containers are healthy."
+
+lab-down: ## Stop lab containers without deleting volumes
+	$(LAB_COMPOSE) down
+
+lab-reset: ## Stop lab containers and delete lab volumes for a fresh reproducible run
+	$(LAB_COMPOSE) down -v --remove-orphans
+
+lab-status: ## Show lab container status
+	$(LAB_COMPOSE) ps
+
+lab-logs: ## Follow lab container logs
+	$(LAB_COMPOSE) logs -f
+
+lab-smoke: ## Verify all lab frontends, backend health proxies, and SeaweedFS bucket setup
+	chmod +x scripts/lab-smoke.sh
+	./scripts/lab-smoke.sh
+
+lab-open: ## Open all lab URLs in the default browser
+	@URLS="http://localhost:1101 http://localhost:1102 http://localhost:1103 http://localhost:1104 http://localhost:1105 http://localhost:18080/admin http://localhost:18888 http://localhost:18333"; \
+	if command -v open >/dev/null 2>&1; then \
+		for URL in $$URLS; do open "$$URL"; done; \
+	elif command -v xdg-open >/dev/null 2>&1; then \
+		for URL in $$URLS; do xdg-open "$$URL" >/dev/null 2>&1 & done; \
+	else \
+		echo "No browser opener found. Open these URLs manually:"; \
+		for URL in $$URLS; do echo "  $$URL"; done; \
+	fi
+
 version: ## Show current version
 	@echo "Current version: $(VERSION)"
 
@@ -262,225 +317,11 @@ changelog-open: ## Open current RELEASE.md without resetting
 changelog-keep: ## Alias: open current RELEASE.md without resetting
 	@$(MAKE) changelog-open
 
-release: ## Full release workflow (main branch only)
-	@CURRENT_BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
-	if [ "$$CURRENT_BRANCH" != "main" ]; then \
-		echo "ERROR: Releases must be made from 'main' branch!"; \
-		echo "Current branch: $$CURRENT_BRANCH"; \
-		echo "Please switch to main and try again."; \
-		exit 1; \
-	fi
-	@echo "On main branch."
-	@echo "Pulling latest changes..."
-	@git pull origin main
-	@echo "Up to date with remote."
-	@echo "Current status:"
-	@git status --short || true
-	@echo "Running tests..."
-	@$(MAKE) test
-	@echo "All tests passed."
-	@CURRENT=$$(cat VERSION); \
-	PATCH=$$(echo $$CURRENT | awk -F. '{print $$1"."$$2"."$$3+1}'); \
-	MINOR=$$(echo $$CURRENT | awk -F. '{print $$1"."$$2+1".0"}'); \
-	MAJOR=$$(echo $$CURRENT | awk -F. '{print $$1+1".0.0"}'); \
-	echo "Current version: $$CURRENT"; \
-	echo "Select version bump:"; \
-	echo "  1) patch -> $$PATCH"; \
-	echo "  2) minor -> $$MINOR"; \
-	echo "  3) major -> $$MAJOR"; \
-	echo "  4) custom"; \
-	echo "  5) skip (keep $$CURRENT)"; \
-	read -p "Enter choice [1-5]: " choice; \
-	case $$choice in \
-		1) NEW_VERSION=$$PATCH ;; \
-		2) NEW_VERSION=$$MINOR ;; \
-		3) NEW_VERSION=$$MAJOR ;; \
-		4) read -p "Enter new version: " NEW_VERSION ;; \
-		5) NEW_VERSION=$$CURRENT ;; \
-		*) echo "Invalid choice, using current."; NEW_VERSION=$$CURRENT ;; \
-	esac; \
-	if [ "$$NEW_VERSION" != "$$CURRENT" ]; then \
-		echo "Bumping version to $$NEW_VERSION..."; \
-		echo "$$NEW_VERSION" > VERSION; \
-		sed -i '' "s/\"version\": \".*\"/\"version\": \"$$NEW_VERSION\"/" frontend/package.json 2>/dev/null || \
-			sed -i "s/\"version\": \".*\"/\"version\": \"$$NEW_VERSION\"/" frontend/package.json; \
-		sed -i '' "s/\"version\": \".*\"/\"version\": \"$$NEW_VERSION\"/" backend/package.json 2>/dev/null || \
-			sed -i "s/\"version\": \".*\"/\"version\": \"$$NEW_VERSION\"/" backend/package.json; \
-		echo "Version bumped to $$NEW_VERSION."; \
-	else \
-		echo "Keeping version $$CURRENT."; \
-	fi
-	@echo "Preparing fresh release notes (RELEASE.md)..."
-	@$(MAKE) changelog
-	@NEW_VERSION=$$(cat VERSION); \
-	echo "Release summary:"; \
-	echo "  Version: v$$NEW_VERSION"; \
-	echo "  Branch: main"; \
-	echo "  Tag: v$$NEW_VERSION"; \
-	echo "Changes to be committed:"; \
-	git status --short; \
-	true
-	@read -p "Proceed with release? [y/N]: " confirm; \
-	if [ "$$confirm" != "y" ] && [ "$$confirm" != "Y" ]; then \
-		echo "Release aborted."; \
-		exit 1; \
-	fi
-	@NEW_VERSION=$$(cat VERSION); \
-	echo "Committing release..."; \
-	git add -A; \
-	git commit -m "chore: release v$$NEW_VERSION" || echo "Nothing to commit."
-	@echo "Changes committed."
-	@echo "Pushing to remote..."
-	@git push origin main
-	@echo "Pushed to origin/main."
-	@NEW_VERSION=$$(cat VERSION); \
-	echo "Creating tag v$$NEW_VERSION..."; \
-	git tag -a "v$$NEW_VERSION" -m "Release v$$NEW_VERSION"; \
-	git push origin "v$$NEW_VERSION"
-	@echo "Tag v$$NEW_VERSION created and pushed."
-	@NEW_VERSION=$$(cat VERSION); \
-	echo "Creating GitHub release..."; \
-	if command -v gh &> /dev/null; then \
-		gh release create "v$$NEW_VERSION" \
-			--title "ExcaliDash v$$NEW_VERSION" \
-			--notes-file RELEASE.md; \
-		echo "GitHub release created."; \
-	else \
-		echo "gh CLI not installed!"; \
-		echo "Install with: brew install gh"; \
-		echo "Then run: gh auth login"; \
-		exit 1; \
-	fi
-	@echo "Building and pushing Docker images..."
-	@./scripts/publish-docker.sh
-	@NEW_VERSION=$$(cat VERSION); \
-	echo "Release complete."; \
-	echo "Version: v$$NEW_VERSION"; \
-	echo "Git tag pushed."; \
-	echo "GitHub release created."; \
-	echo "Docker images published."
-
-pre-release: ## Pre-release workflow (pre-release branch only)
-	@CURRENT_BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
-	if [ "$$CURRENT_BRANCH" != "pre-release" ]; then \
-		echo "ERROR: Pre-releases must be made from 'pre-release' branch!"; \
-		echo "Current branch: $$CURRENT_BRANCH"; \
-		echo "Please switch to pre-release and try again."; \
-		exit 1; \
-	fi
-	@echo "On pre-release branch."
-	@echo "Pulling latest changes..."
-	@git pull origin pre-release
-	@echo "Up to date with remote."
-	@echo "Current status:"
-	@git status --short || true
-	@echo "Running tests..."
-	@$(MAKE) test
-	@echo "All tests passed."
-	@CURRENT=$$(cat VERSION); \
-	PATCH=$$(echo $$CURRENT | awk -F. '{print $$1"."$$2"."$$3+1}'); \
-	MINOR=$$(echo $$CURRENT | awk -F. '{print $$1"."$$2+1".0"}'); \
-	MAJOR=$$(echo $$CURRENT | awk -F. '{print $$1+1".0.0"}'); \
-	echo "Current version: $$CURRENT"; \
-	echo "Select version bump:"; \
-	echo "  1) patch -> $$PATCH-dev"; \
-	echo "  2) minor -> $$MINOR-dev"; \
-	echo "  3) major -> $$MAJOR-dev"; \
-	echo "  4) custom"; \
-	echo "  5) skip (keep $$CURRENT-dev)"; \
-	read -p "Enter choice [1-5]: " choice; \
-	case $$choice in \
-		1) NEW_VERSION=$$PATCH ;; \
-		2) NEW_VERSION=$$MINOR ;; \
-		3) NEW_VERSION=$$MAJOR ;; \
-		4) read -p "Enter new version (without -dev suffix): " NEW_VERSION ;; \
-		5) NEW_VERSION=$$CURRENT ;; \
-		*) echo "Invalid choice, using current."; NEW_VERSION=$$CURRENT ;; \
-	esac; \
-	if [ "$$NEW_VERSION" != "$$CURRENT" ]; then \
-		echo "Bumping version to $$NEW_VERSION..."; \
-		echo "$$NEW_VERSION" > VERSION; \
-		sed -i '' "s/\"version\": \".*\"/\"version\": \"$$NEW_VERSION\"/" frontend/package.json 2>/dev/null || \
-			sed -i "s/\"version\": \".*\"/\"version\": \"$$NEW_VERSION\"/" frontend/package.json; \
-		sed -i '' "s/\"version\": \".*\"/\"version\": \"$$NEW_VERSION\"/" backend/package.json 2>/dev/null || \
-			sed -i "s/\"version\": \".*\"/\"version\": \"$$NEW_VERSION\"/" backend/package.json; \
-		echo "Version bumped to $$NEW_VERSION."; \
-	else \
-		echo "Keeping version $$CURRENT."; \
-	fi
-	@echo "Preparing fresh pre-release notes (RELEASE.md)..."
-	@$(MAKE) changelog PRERELEASE=1
-	@NEW_VERSION=$$(cat VERSION); \
-	echo "Pre-release summary:"; \
-	echo "  Version: v$$NEW_VERSION-dev"; \
-	echo "  Branch: pre-release"; \
-	echo "  Tag: v$$NEW_VERSION-dev (pre-release)"; \
-	echo "Changes to be committed:"; \
-	git status --short; \
-	true
-	@read -p "Proceed with pre-release? [y/N]: " confirm; \
-	if [ "$$confirm" != "y" ] && [ "$$confirm" != "Y" ]; then \
-		echo "Pre-release aborted."; \
-		exit 1; \
-	fi
-	@NEW_VERSION=$$(cat VERSION); \
-	echo "Committing pre-release..."; \
-	git add -A; \
-	git commit -m "chore: pre-release v$$NEW_VERSION-dev" || echo "Nothing to commit."
-	@echo "Changes committed."
-	@echo "Pushing to remote..."
-	@git push origin pre-release
-	@echo "Pushed to origin/pre-release."
-	@NEW_VERSION=$$(cat VERSION); \
-	PRE_TAG="v$$NEW_VERSION-dev"; \
-	echo "Creating tag $$PRE_TAG..."; \
-	git tag -a "$$PRE_TAG" -m "Pre-release $$PRE_TAG"; \
-	git push origin "$$PRE_TAG"
-	@echo "Tag $$PRE_TAG created and pushed."
-	@NEW_VERSION=$$(cat VERSION); \
-	PRE_TAG="v$$NEW_VERSION-dev"; \
-	echo "Creating GitHub pre-release..."; \
-	if command -v gh &> /dev/null; then \
-		gh release create "$$PRE_TAG" \
-			--title "ExcaliDash $$PRE_TAG (Pre-release)" \
-			--notes-file RELEASE.md \
-			--prerelease; \
-		echo "GitHub pre-release created."; \
-	else \
-		echo "gh CLI not installed!"; \
-		echo "Install with: brew install gh"; \
-		echo "Then run: gh auth login"; \
-		exit 1; \
-	fi
-	@echo "Building and pushing Docker images..."
-	@./scripts/publish-docker-prerelease.sh
-	@NEW_VERSION=$$(cat VERSION); \
-	echo "Pre-release complete."; \
-	echo "Version: v$$NEW_VERSION-dev"; \
-	echo "Git tag pushed."; \
-	echo "GitHub pre-release created."; \
-	echo "Docker images published."
-
-release-docker: ## Build and push release Docker images
-	./scripts/publish-docker.sh
-
-pre-release-docker: ## Build and push pre-release Docker images
-	./scripts/publish-docker-prerelease.sh
-
-dev-release: ## Build and push custom dev release (usage: make dev-release NAME=issue38)
-	@if [ -z "$(NAME)" ]; then \
-		echo "ERROR: NAME parameter is required!"; \
-		echo "Usage: make dev-release NAME=<custom-name>"; \
-		echo "Example: make dev-release NAME=issue38"; \
-		echo "  This will create tags like: 0.3.1-dev-issue38"; \
-		exit 1; \
-	fi
-	@echo "Building custom dev release: $(NAME)"
-	@./scripts/publish-docker-dev.sh $(NAME)
+include make/release.mk
 
 db-migrate: ## Run database migrations
 	@echo "Running database migrations..."
-	cd backend && npx prisma migrate dev
+	cd backend && node scripts/provider-prisma.cjs --persist-provider-migrations migrate dev --skip-generate
 	@echo "Migrations complete."
 
 db-generate: ## Generate Prisma client
@@ -492,7 +333,7 @@ db-reset: ## Reset database (WARNING: destroys all data)
 	@echo "WARNING: This will destroy all data!"
 	@read -p "Are you sure? [y/N]: " confirm; \
 	if [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ]; then \
-		cd backend && npx prisma migrate reset --force; \
+		cd backend && node scripts/provider-prisma.cjs migrate reset --force --skip-generate; \
 		echo "Database reset complete."; \
 	else \
 		echo "Cancelled"; \

@@ -2,7 +2,9 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const versionFilePath = path.resolve(__dirname, "../VERSION");
 let versionFromFile = "0.0.0";
 
@@ -39,6 +41,11 @@ export default defineConfig(({ command }) => {
         target: "es2022",
       },
     },
+    build: {
+      // Skip gzip size reporting to reduce peak memory during Docker builds.
+      reportCompressedSize: false,
+      chunkSizeWarningLimit: 2000,
+    },
     server: {
       proxy: {
         "/api": {
@@ -52,10 +59,6 @@ export default defineConfig(({ command }) => {
           ws: true,
         },
       },
-    },
-    build: {
-      // Skip gzip size reporting to reduce peak memory during Docker builds.
-      reportCompressedSize: false,
     },
   };
 });

@@ -5,7 +5,6 @@ export type ParsedSemver = {
   prerelease: string[]; // split by "."
   raw: string;
 };
-
 const SEMVER_RE =
   /^v?(?<major>0|[1-9]\d*)\.(?<minor>0|[1-9]\d*)\.(?<patch>0|[1-9]\d*)(?:-(?<pre>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
 
@@ -66,11 +65,4 @@ export const compareSemver = (a: ParsedSemver, b: ParsedSemver): number => {
   }
 
   return 0;
-};
-
-export const isSemverGreater = (aRaw: string, bRaw: string): boolean | null => {
-  const a = parseSemver(aRaw);
-  const b = parseSemver(bRaw);
-  if (!a || !b) return null;
-  return compareSemver(a, b) > 0;
 };

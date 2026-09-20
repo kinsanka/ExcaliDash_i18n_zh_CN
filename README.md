@@ -2,7 +2,7 @@
 
 # ExcaliDash
 
-> Chinese-enhanced fork of [ZimengXiong/ExcaliDash](https://github.com/ZimengXiong/ExcaliDash) with Simplified Chinese UI, updated Excalidraw CJK font support, and Docker-ready deployment.
+> Chinese-enhanced fork of [ZimengXiong/ExcaliDash](https://github.com/ZimengXiong/ExcaliDash) with a Simplified Chinese UI, Excalidraw CJK support, and Docker-ready deployment.
 
 [English](./README.md) | [简体中文](./README.zh-CN.md)
 
@@ -14,24 +14,9 @@ A self-hosted dashboard and organizer for [Excalidraw](https://github.com/excali
 
 ![](readme-assets/demo.gif)
 
-## Fork Notes
-
-This fork is intended for users who want a Chinese-friendly ExcaliDash deployment without maintaining their own patches.
-
-- Simplified Chinese UI for the main user flows
-- Excalidraw upgraded to `0.18.0` for official CJK font support
-- Docker Compose production file preconfigured for this fork's image names
-- Keeps the upstream project structure so future syncs remain manageable
-
-Project links:
-
-- Upstream: [ZimengXiong/ExcaliDash](https://github.com/ZimengXiong/ExcaliDash)
-- This fork: `kinsanka/ExcaliDash_i18n_zh_CN`
-
 ## Table of Contents
 
 - [Features](#features)
-- [Fork Notes](#fork-notes)
 - [Upgrading](#upgrading)
 - [Installation](#installation)
   - [Quickstart](#quickstart)
@@ -52,6 +37,13 @@ Project links:
 <summary>Real time collaboration</summary>
 
 ![](readme-assets/collabDemo.gif)
+
+</details>
+
+<details>
+<summary>Version history and restore</summary>
+
+Automatically retain recent drawing snapshots, preview past versions from the editor, and restore a previous state when needed.
 
 </details>
 
@@ -168,19 +160,7 @@ docker compose -f docker-compose.prod.yml up -d
 # Access the frontend at localhost:6767
 ```
 
-Default images used by this fork:
-
-```yaml
-backend: kinsanka/excalidash-backend:latest
-frontend: kinsanka/excalidash-frontend:latest
-```
-
-To pin a specific version:
-
-```bash
-APP_TAG=v0.5.0-zh.1 docker compose -f docker-compose.prod.yml pull
-APP_TAG=v0.5.0-zh.1 docker compose -f docker-compose.prod.yml up -d
-```
+This fork publishes `kinsanka/excalidash-backend` and `kinsanka/excalidash-frontend`. Pin a Chinese release with `APP_TAG=v0.6.0-zh.1` for reproducible deployments.
 
 For single-container deployments, `JWT_SECRET` can be omitted and will be auto-generated and persisted in the backend volume on first start. For portability and most production deployments, set a fixed `JWT_SECRET` explicitly.
 
@@ -210,177 +190,20 @@ docker compose up -d
 
 ## Advanced
 
-<details>
-<summary>Reverse Proxy / Traefik</summary>
+The root README keeps the install path short. See
+[advanced deployment and operations](docs/DEPLOYMENT.md) for reverse proxy,
+auth/OIDC, database provider, offline, backup, password policy, and operational
+details.
 
-When running ExcaliDash behind Traefik, Nginx, or another reverse proxy, configure both containers so that API + WebSocket calls resolve correctly:
+For the full environment-variable reference, see
+[configuration](docs/CONFIGURATION.md).
 
-| Variable       | Purpose                                                                                                                                                                   |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `FRONTEND_URL` | Backend allowed origin(s). Must match the public URL users access (for example `https://excalidash.example.com`). Supports comma-separated values for multiple addresses. |
-| `TRUST_PROXY`  | Set to `1` when traffic passes through one trusted reverse-proxy hop (for example frontend nginx -> backend) and headers are sanitized.                                   |
-| `BACKEND_URL`  | Frontend container-to-backend target used by Nginx. Override when backend host differs from default service DNS/host.                                                     |
-
-```yaml
-# docker-compose.yml example
-backend:
-  environment:
-    # Single URL
-    - FRONTEND_URL=https://excalidash.example.com
-    # Trust exactly one reverse-proxy hop
-    - TRUST_PROXY=1
-    # Or multiple URLs (comma-separated) for local + network access
-    # - FRONTEND_URL=http://localhost:6767,http://192.168.1.100:6767,http://nas.local:6767
-frontend:
-  environment:
-    # For standard Docker Compose (default)
-    # - BACKEND_URL=backend:8000
-    # For Kubernetes, use the service DNS name:
-    - BACKEND_URL=excalidash-backend.default.svc.cluster.local:8000
-```
-
-</details>
-
-<details>
-<summary>Scaling / HA (Current Limitations)</summary>
-
-ExcaliDash currently supports running **one backend instance**.
-
-Why:
-
-| Area          | Limitation                                                                                                                                                                                                                                                                                        |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Database      | The backend uses a local **SQLite file** database by default (`DATABASE_URL=file:/.../dev.db`). Running multiple backend replicas either creates split-brain state (separate DB files/volumes) or requires sharing a single SQLite file across hosts, which is not a reliable deployment pattern. |
-| Collaboration | Real-time presence state is tracked **in-memory** in the backend process, so multiple replicas will fragment presence/collaboration unless a shared Socket.IO adapter is added.                                                                                                                   |
-
-Recommended deployment pattern:
-
-| Component | Guidance                                                                |
-| --------- | ----------------------------------------------------------------------- |
-| Backend   | 1 replica, persistent volume, regular backups.                          |
-| Frontend  | 1 replica is simplest; scaling is generally fine since it is stateless. |
-
-</details>
-
-<details>
-<summary>Auth, Onboarding, and First Admin Setup</summary>
-
-ExcaliDash supports local login and OIDC, and includes a one-time first-admin bootstrap key to protect initial setup/migration flows.
-
-Auth modes:
-
-| `AUTH_MODE`       | Behavior                                                       |
-| ----------------- | -------------------------------------------------------------- |
-| `local` (default) | Native email/password login only.                              |
-| `hybrid`          | Native login plus OIDC login.                                  |
-| `oidc_enforced`   | OIDC-only login (`/auth/register` and `/auth/login` disabled). |
-
-If you upgrade and see an onboarding/setup flow, follow the UI. For emergency-only operator access, you can temporarily bypass the onboarding gate:
-
-```bash
-DISABLE_ONBOARDING_GATE=true docker compose -f docker-compose.prod.yml up -d
-```
-
-One-time first-admin bootstrap setup code (local auth only):
-
-| What             | Notes                                                                                |
-| ---------------- | ------------------------------------------------------------------------------------ |
-| When required    | Auth enabled and no active users (fresh install or certain migrations).              |
-| Where to find it | Backend logs: `[BOOTSTRAP SETUP] One-time admin setup code ...`.                     |
-| Behavior         | Single-use; if you enter an invalid/expired code, check logs for the refreshed code. |
-
-Find the current code in logs:
-
-```bash
-docker compose -f docker-compose.prod.yml logs backend --tail=200 | grep "BOOTSTRAP SETUP"
-```
-
-OIDC configuration (for `hybrid` / `oidc_enforced`) requires these backend env vars:
-
-```yaml
-backend:
-  environment:
-    - AUTH_MODE=oidc_enforced
-    - OIDC_PROVIDER_NAME=Authentik
-    - OIDC_ISSUER_URL=https://auth.example.com/application/o/excalidash/
-    - OIDC_CLIENT_ID=your-client-id
-    # Optional for public clients; required for confidential clients
-    # - OIDC_CLIENT_SECRET=your-client-secret
-    - OIDC_REDIRECT_URI=https://excalidash.example.com/api/auth/oidc/callback
-    - OIDC_SCOPES=openid profile email
-```
-
-Notes:
-
-| Topic                       | Notes                                                                                                                         |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| OIDC-only (`oidc_enforced`) | You typically do not use local bootstrap admin registration; first admin can be created through your IdP depending on config. |
-| Reverse proxy               | Set `FRONTEND_URL` and `TRUST_PROXY` correctly or auth + websockets may fail.                                                 |
-
-</details>
-
-<details>
-<summary>Local OIDC Test Stack (Docker + Keycloak)</summary>
-
-### Local OIDC Test Stack (Docker + Keycloak)
-
-This repo includes a Keycloak container + realm seed for local OIDC testing:
-
-- Compose file: `docker-compose.oidc.yml`
-- Realm import: `oidc/keycloak/realm-excalidash.json`
-
-The realm seed intentionally contains **no users and no passwords**. You create a realm user and set a password via the Keycloak admin UI.
-
-Start Keycloak:
-
-```bash
-# From repo root
-# Choose a strong password; do not commit it.
-export KEYCLOAK_ADMIN_PASSWORD='...'
-docker compose -f docker-compose.oidc.yml up -d
-```
-
-Open Keycloak admin UI (realm/user setup):
-
-- `http://localhost:8080/admin`
-- Switch realm to `excalidash`
-- Create a user and set a password in `Credentials`
-
-Configure ExcaliDash backend for hybrid OIDC:
-
-```bash
-cd backend
-cp .env.oidc.example .env
-# Ensure OIDC_REDIRECT_URI matches where your frontend is running:
-# - http://localhost:6767/api/auth/oidc/callback (repo frontend dev default)
-# - https://excalidash.example.com/api/auth/oidc/callback (production)
-```
-
-Stop/clean up:
-
-```bash
-docker compose -f docker-compose.oidc.yml down
-```
-
-</details>
-
-<details>
-<summary>Configuration (Backend Environment Variables)</summary>
-
-Base values are documented in `backend/.env.example`. Common ones to care about:
-
-| Variable       | Default / Example         | Description                                                                         |
-| -------------- | ------------------------- | ----------------------------------------------------------------------------------- |
-| `DATABASE_URL` | `file:/app/prisma/dev.db` | SQLite file or external DB URL.                                                     |
-| `FRONTEND_URL` | `http://localhost:6767`   | Allowed frontend origin(s), comma-separated for multiple entries.                   |
-| `TRUST_PROXY`  | `false`                   | `false`, `true`, or hop count (for example `1`).                                    |
-| `JWT_SECRET`   | `change-this-secret...`   | Recommended in production so sessions remain stable across restarts and migrations. |
-| `CSRF_SECRET`  | `change-this-secret`      | Recommended in production so CSRF validation remains stable across restarts.        |
-| `AUTH_MODE`    | `local`                   | `local`, `hybrid`, `oidc_enforced`.                                                 |
-
-</details>
+For release-candidate validation across multiple local configurations, see the
+[configuration lab](docs/CONFIG_LAB.md).
 
 # Development
+
+For contributor workflow, `make dev` starts the app in local single-user mode so you can reproduce editor bugs without going through login/onboarding. Use `make dev-auth` if you need to test local auth or OIDC flows from your `backend/.env`.
 
 <details>
 <summary>Clone the Repository</summary>
@@ -493,9 +316,8 @@ Common flags:
 </details>
 
 # Credits
-
 - Original project: [ZimengXiong/ExcaliDash](https://github.com/ZimengXiong/ExcaliDash)
 - Example designs from:
-  - https://github.com/Prakash-sa/system-design-ultimatum/tree/main
-  - https://github.com/kitsteam/excalidraw-examples/tree/main
+  - <https://github.com/Prakash-sa/system-design-ultimatum/tree/main>
+  - <https://github.com/kitsteam/excalidraw-examples/tree/main>
 - [The amazing work of Excalidraw & contributors](https://www.npmjs.com/package/@excalidraw/excalidraw)

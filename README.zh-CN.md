@@ -11,7 +11,8 @@
 这个版本主要面向想直接使用中文界面的用户，而不是自己长期维护 patch。
 
 - 主流程已支持简体中文
-- Excalidraw 已升级到 `0.18.0`
+- 已同步上游正式版 `v0.6.0`
+- Excalidraw 已升级到 `0.18.1`
 - 已接入 Excalidraw 官方样式和 CJK 字体支持
 - `docker-compose.prod.yml` 默认使用本 fork 的镜像名
 - 保留了与上游接近的项目结构，便于后续同步
@@ -29,6 +30,10 @@
 - 实时协作
 - 可选本地认证与 OIDC
 - 分享给内部用户或外部链接访问
+- 集合共享与“分享给我的”隐藏功能
+- 图片独立存储、保存冲突自动协调和离开页面前补发保存
+- 主题、语言、排序、网格步长等用户偏好持久化
+- 可选 SQLite 或 PostgreSQL 数据库
 
 ## 快速开始
 
@@ -64,8 +69,8 @@ frontend: kinsanka/excalidash-frontend:latest
 如果你想固定版本，建议显式指定 tag：
 
 ```bash
-APP_TAG=v0.5.0-zh.1 docker compose -f docker-compose.prod.yml pull
-APP_TAG=v0.5.0-zh.1 docker compose -f docker-compose.prod.yml up -d
+APP_TAG=v0.6.0-zh.1 docker compose -f docker-compose.prod.yml pull
+APP_TAG=v0.6.0-zh.1 docker compose -f docker-compose.prod.yml up -d
 ```
 
 ## 常用部署说明
@@ -102,6 +107,26 @@ APP_TAG=v0.5.0-zh.1 docker compose -f docker-compose.prod.yml up -d
 - `docker compose down -v`
 - 手动删除 volume
 - 把挂载路径切换到一个新的空目录
+
+### 4. 数据库类型
+
+支持 SQLite 和 PostgreSQL 两种数据库。默认配置仍使用 SQLite，已有部署升级后不需要改动：
+
+```yaml
+environment:
+  - DATABASE_PROVIDER=sqlite
+  - DATABASE_URL=file:/app/prisma/dev.db
+```
+
+如需使用 PostgreSQL，请在首次启动前改为：
+
+```yaml
+environment:
+  - DATABASE_PROVIDER=postgresql
+  - DATABASE_URL=postgresql://user:password@host:5432/excalidash
+```
+
+容器启动时会自动选择对应的 Prisma 迁移。切换数据库类型不会自动迁移旧数据，现有 SQLite 图稿需要另行导出和迁移。
 
 ## 升级
 
@@ -166,8 +191,6 @@ npm run dev
 cd backend
 npm install
 cp .env.example .env
-npx prisma generate
-npx prisma db push
 npm run dev
 ```
 

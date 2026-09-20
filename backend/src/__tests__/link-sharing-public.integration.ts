@@ -47,14 +47,19 @@ describe("Link Sharing - Public By Drawing ID", () => {
 
   const createLinkShare = async (
     drawingId: string,
-    permission: "view" | "edit"
+    permission: "view" | "edit",
+    body?: { expiresAt?: string | null },
   ) => {
+    const payload: Record<string, unknown> = { permission };
+    if (body && Object.prototype.hasOwnProperty.call(body, "expiresAt")) {
+      payload.expiresAt = body.expiresAt;
+    }
     const response = await ownerAgent
       .post(`/drawings/${drawingId}/link-shares`)
       .set("User-Agent", userAgent)
       .set("Authorization", `Bearer ${ownerToken}`)
       .set(ownerCsrfHeaderName, ownerCsrfToken)
-      .send({ permission });
+      .send(payload);
 
     expect(response.status).toBe(200);
     return response;

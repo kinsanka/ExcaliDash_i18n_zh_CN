@@ -10,15 +10,22 @@ export const translations: Record<"en" | "zh-CN", TranslationDictionary> = {
 
 export const LANGUAGE_STORAGE_KEY = "excalidash-language";
 
-export const getCurrentLanguage = (): "en" | "zh-CN" => {
-  if (typeof window === "undefined") {
-    return "en";
+export const getLanguageStorage = (): Storage | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage ?? null;
+  } catch {
+    return null;
   }
-  const stored = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
+};
+
+export const getCurrentLanguage = (): "en" | "zh-CN" => {
+  const stored = getLanguageStorage()?.getItem(LANGUAGE_STORAGE_KEY);
   if (stored === "zh-CN" || stored === "en") {
     return stored;
   }
-  const preferred = navigator.language.toLowerCase();
+  const preferred =
+    typeof navigator === "undefined" ? "" : navigator.language?.toLowerCase() ?? "";
   return preferred.startsWith("zh") ? "zh-CN" : "en";
 };
 

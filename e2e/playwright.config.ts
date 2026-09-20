@@ -19,13 +19,15 @@ export default defineConfig({
 
   globalSetup: "./global-setup",
 
-  fullyParallel: true,
+  // The suite uses one backend SQLite database and performs broad cleanup by
+  // naming convention, so running tests concurrently creates cross-test leaks.
+  fullyParallel: false,
 
   forbidOnly: !!process.env.CI,
 
   retries: process.env.CI ? 2 : 0,
 
-  workers: process.env.CI ? 1 : undefined,
+  workers: 1,
 
   reporter: [
     ["list"],
@@ -71,20 +73,22 @@ export default defineConfig({
     {
       command: "cd ../backend && npm run dev",
       url: `${BACKEND_URL}/health`,
-      reuseExistingServer: true,
+      reuseExistingServer: process.env.E2E_REUSE_SERVER === "true",
       timeout: 120000,
       stdout: "pipe",
       stderr: "pipe",
       env: {
         DATABASE_URL: "file:./dev.db",
         FRONTEND_URL,
-        CSRF_MAX_REQUESTS: "1000",
+        CSRF_MAX_REQUESTS: "100000",
+        RATE_LIMIT_MAX_REQUESTS: "100000",
+        CSRF_SECRET: "e2e-csrf-secret",
       },
     },
     {
       command: "cd ../frontend && npm run dev -- --host",
       url: FRONTEND_URL,
-      reuseExistingServer: true,
+      reuseExistingServer: process.env.E2E_REUSE_SERVER === "true",
       timeout: 120000,
       stdout: "pipe",
       stderr: "pipe",

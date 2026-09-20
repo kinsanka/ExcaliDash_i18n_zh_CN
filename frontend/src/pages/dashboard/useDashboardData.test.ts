@@ -33,7 +33,6 @@ const makeDrawing = (id: string) => ({
   version: 1,
   preview: null,
 });
-
 const makeCollection = (id: string) => ({
   id,
   name: id,
@@ -196,6 +195,44 @@ describe("useDashboardData", () => {
     expect(result.current.drawings.map((drawing) => drawing.id)).toEqual(["new"]);
     expect(result.current.collections.map((collection) => collection.id)).toEqual([
       "new-collection",
+    ]);
+  });
+
+  it("drops deleted shared collections after refresh", async () => {
+    getDrawingsMock.mockResolvedValue({
+      drawings: [makeDrawing("d1")],
+      totalCount: 1,
+      limit: 24,
+      offset: 0,
+    });
+    getCollectionsMock
+      .mockResolvedValueOnce([makeCollection("shared-a"), makeCollection("shared-b")])
+      .mockResolvedValueOnce([makeCollection("shared-a")]);
+
+    const { result } = renderHook(() =>
+      useDashboardData({
+        debouncedSearch: "",
+        selectedCollectionId: undefined,
+        sortField: "updatedAt",
+        sortDirection: "desc",
+        pageSize: 24,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+    expect(result.current.collections.map((collection) => collection.id)).toEqual([
+      "shared-a",
+      "shared-b",
+    ]);
+
+    await act(async () => {
+      await result.current.refreshData();
+    });
+
+    expect(result.current.collections.map((collection) => collection.id)).toEqual([
+      "shared-a",
     ]);
   });
 });

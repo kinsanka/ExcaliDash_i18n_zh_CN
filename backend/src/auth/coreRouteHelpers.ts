@@ -1,7 +1,16 @@
 import { PrismaClient } from "../generated/client";
 import { getEffectiveRegistrationEnabled } from "./accessPolicy";
 
-type AuthMode = "local" | "hybrid" | "oidc_enforced";
+type AuthMode = "local" | "hybrid" | "oidc_enforced" | "disabled";
+
+type PasswordPolicyPayload = {
+  minLength: number;
+  maxLength: number;
+  requireUppercase: boolean;
+  requireLowercase: boolean;
+  requireNumber: boolean;
+  requireSymbol: boolean;
+};
 
 type AuthUser = {
   id: string;
@@ -71,6 +80,7 @@ export const buildAuthStatusPayload = ({
   oidcJitProvisioningEnabled,
   onboarding,
   bootstrapRequired,
+  passwordPolicy,
   user,
 }: {
   authMode: AuthMode;
@@ -89,6 +99,7 @@ export const buildAuthStatusPayload = ({
     mode: "migration" | "fresh";
   };
   bootstrapRequired: boolean;
+  passwordPolicy: PasswordPolicyPayload;
   user: AuthUser;
 }) => {
   const onboardingRequired = authMode === "local" ? onboarding.needsChoice : false;
@@ -111,6 +122,7 @@ export const buildAuthStatusPayload = ({
     authOnboardingRequired: onboardingRequired,
     authOnboardingMode: onboardingMode,
     authOnboardingRecommended: onboardingRequired ? "enable" : null,
+    passwordPolicy,
     user: exposedUser
       ? {
           id: exposedUser.id,
