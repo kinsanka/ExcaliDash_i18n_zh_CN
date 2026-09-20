@@ -9,6 +9,7 @@ This file and `backend/.env.example` are generated from that registry; do not ed
 
 | Variable | Default | Required | Description |
 | --- | --- | --- | --- |
+| `APP_VERSION` | — | No | Release tag injected into published backend images for update comparisons. |
 | `PORT` | `8000` | No | TCP port the backend HTTP server listens on. |
 | `NODE_ENV` | `development` | No | Runtime environment; production enables extra validation and hardening. Allowed: development, production, test. |
 | `FRONTEND_URL` | — | No | Comma-separated CORS allowlist of frontend origins; also drives HTTPS detection. |
@@ -126,4 +127,3 @@ This file and `backend/.env.example` are generated from that registry; do not ed
 | `VITE_API_URL` | `/api` | No | Base URL the frontend uses to reach the backend API. Keep /api so requests stay same-origin (proxied by Vite in dev and nginx in production), avoiding CORS. Consumed outside the backend; documented only. |
 | `VITE_EXCALIDASH_UI_FONT_FAMILY` | `Excalifont` | No | Optional app-shell display font family override. Falls back to Excalifont when unset. Consumed outside the backend; documented only. |
 | `VITE_EXCALIDASH_UI_FONT_URL` | — | No | Optional self-hosted WOFF2 URL for the display font; when set, a matching @font-face is injected for VITE_EXCALIDASH_UI_FONT_FAMILY. Consumed outside the backend; documented only. |
-
