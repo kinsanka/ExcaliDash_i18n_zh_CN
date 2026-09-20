@@ -1,4 +1,4 @@
-# ExcaliDash 中文版 v0.6.0-zh.4
+# ExcaliDash 中文版 v0.6.0-zh.5
 
 发布日期：2026-09-21
 
@@ -16,6 +16,7 @@
 - 应用界面新增集中式简体中文词典和动态翻译桥，适配 v0.6.0 拆分后的组件结构。
 - 更新页面新增原版正式版进度查询，可查看上游版本、发布时间、同步状态及原版 Release。
 - 原版正式版进度区域改为跟随设置卡片的中性主题，仅用状态色区分同步结果。
+- 版本信息中的构建 SHA 改为中性短标识，避免被误认为错误提示。
 - 发布标签会注入后端镜像，中文版 `-zh.N` 修订之间的更新提示现在可以准确比较。
 - Excalidraw 使用官方中文，并继续补全右键菜单、属性面板、箭头端点和快捷键等缺失文案。
 - 保留 Excalifont CJK 手绘字体支持。
@@ -36,8 +37,8 @@ docker compose -f docker-compose.prod.yml logs backend --tail=200
 固定使用本版本：
 
 ```bash
-APP_TAG=v0.6.0-zh.4 docker compose -f docker-compose.prod.yml pull
-APP_TAG=v0.6.0-zh.4 docker compose -f docker-compose.prod.yml up -d
+APP_TAG=v0.6.0-zh.5 docker compose -f docker-compose.prod.yml pull
+APP_TAG=v0.6.0-zh.5 docker compose -f docker-compose.prod.yml up -d
 ```
 
 不要在升级时执行 `docker compose down -v`，否则会删除持久化数据。

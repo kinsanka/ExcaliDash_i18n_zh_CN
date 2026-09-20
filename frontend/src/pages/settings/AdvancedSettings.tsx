@@ -230,9 +230,14 @@ export const AdvancedSettings = ({
               {appVersion}{" "}
             </span>{" "}
             {buildLabel && (
-              <span className="uppercase tracking-wide text-red-500 dark:text-red-400">
+              <span
+                className="max-w-full truncate font-mono text-[10px] font-medium tracking-normal text-slate-400 dark:text-neutral-500"
+                title={buildLabel}
+              >
                 {" "}
-                {buildLabel}{" "}
+                {buildLabel.length > 16
+                  ? buildLabel.slice(0, 12)
+                  : buildLabel}{" "}
               </span>
             )}{" "}
           </div>{" "}
@@ -241,4 +246,3 @@ export const AdvancedSettings = ({
     </div>{" "}
   </details>
 );
-
