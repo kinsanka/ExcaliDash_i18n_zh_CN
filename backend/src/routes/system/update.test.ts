@@ -123,6 +123,49 @@ describe("system/update logic", () => {
     expect(latest.latestVersion).toBe("0.6.0-zh.1");
   });
 
+  it("queries the upstream repository for its latest stable release", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      makeFetchResponse({
+        status: 200,
+        json: [
+          {
+            tag_name: "v0.7.0",
+            prerelease: false,
+            draft: false,
+            html_url: "https://github.com/ZimengXiong/ExcaliDash/releases/tag/v0.7.0",
+            published_at: "2026-09-20T00:00:00Z",
+          },
+        ],
+      }),
+    );
+    (globalThis as any).fetch = fetchMock;
+
+    const mod = await import("./update");
+    mod.__resetUpdateCacheForTests();
+    const latest = await mod.fetchUpstreamLatest();
+
+    expect(latest.latestVersion).toBe("0.7.0");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.github.com/repos/ZimengXiong/ExcaliDash/releases?per_page=30",
+      expect.any(Object),
+    );
+  });
+
+  it("compares upstream progress using the localized release base version", async () => {
+    const mod = await import("./update");
+
+    expect(mod.computeUpstreamSyncStatus("0.6.0-zh.2", "0.6.0")).toBe(
+      "synced",
+    );
+    expect(mod.computeUpstreamSyncStatus("0.6.0-zh.2", "0.7.0")).toBe(
+      "behind",
+    );
+    expect(mod.computeUpstreamSyncStatus("0.7.0-zh.1", "0.6.0")).toBe(
+      "ahead",
+    );
+    expect(mod.computeUpstreamSyncStatus(null, "0.6.0")).toBe("unknown");
+  });
+
   it("prerelease channel can pick prerelease when newer than stable", async () => {
     const releases = [
       { tag_name: "v1.2.0-dev.2", prerelease: true, draft: false, html_url: "u1", published_at: "t1" },

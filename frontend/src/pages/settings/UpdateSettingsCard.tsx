@@ -1,6 +1,7 @@
-import { Check, RefreshCw } from "lucide-react";
+import { Check, ExternalLink, GitFork, RefreshCw } from "lucide-react";
 import clsx from "clsx";
 import type * as api from "../../api";
+import { useI18n } from "../../context/I18nContext";
 
 type UpdateSettingsCardProps = {
   updateChannel: api.UpdateChannel;
@@ -18,7 +19,27 @@ export const UpdateSettingsCard = ({
   updateError,
   onChannelChange,
   onCheckForUpdates,
-}: UpdateSettingsCardProps) => (
+}: UpdateSettingsCardProps) => {
+  const { language, t } = useI18n();
+  const upstream = updateInfo?.upstream;
+  const upstreamPublishedAt = upstream?.publishedAt
+    ? new Date(upstream.publishedAt)
+    : null;
+  const hasValidPublishedAt =
+    upstreamPublishedAt && !Number.isNaN(upstreamPublishedAt.getTime());
+  const upstreamStatus = (() => {
+    if (upstream?.error) return t("settings.upstreamUnavailable");
+    if (upstream?.syncStatus === "synced") return t("settings.upstreamSynced");
+    if (upstream?.syncStatus === "behind") {
+      return t("settings.upstreamBehind", {
+        version: updateInfo?.latestVersion ?? "?",
+      });
+    }
+    if (upstream?.syncStatus === "ahead") return t("settings.upstreamAhead");
+    return t("settings.upstreamUnknown");
+  })();
+
+  return (
   <div className="flex flex-col p-4 sm:p-6 bg-white dark:bg-neutral-900 border-2 border-black dark:border-neutral-700 rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.2)]">
     <div className="flex items-center gap-3 sm:gap-4 mb-6">
       <div className="w-12 h-12 sm:w-16 sm:h-16 flex-shrink-0 bg-emerald-50 dark:bg-emerald-950/30 rounded-2xl flex items-center justify-center border-2 border-emerald-100 dark:border-emerald-800/50 relative overflow-hidden group">
@@ -40,7 +61,7 @@ export const UpdateSettingsCard = ({
       </div>
       <div className="min-w-0">
         <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white truncate">
-          Updates
+          {t("settings.updates")}
         </h3>
       </div>
     </div>
@@ -51,7 +72,7 @@ export const UpdateSettingsCard = ({
             className="text-[10px] sm:text-xs font-black uppercase tracking-widest text-slate-400 dark:text-neutral-500"
             htmlFor="settings-update-channel"
           >
-            Channel
+            {t("settings.channel")}
           </label>
           <span
             className={clsx(
@@ -74,14 +95,14 @@ export const UpdateSettingsCard = ({
           }
           className="w-full h-10 px-2 sm:px-3 rounded-lg border-2 border-black dark:border-neutral-700 bg-white dark:bg-neutral-800 text-sm font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)]"
         >
-          <option value="stable">Stable</option>
-          <option value="prerelease">Prerelease</option>
+          <option value="stable">{t("settings.stable")}</option>
+          <option value="prerelease">{t("settings.prerelease")}</option>
         </select>
       </div>
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between px-1">
           <span className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-neutral-500 uppercase tracking-widest">
-            Current Status
+            {t("settings.currentStatus")}
           </span>
         </div>
         <div
@@ -103,11 +124,13 @@ export const UpdateSettingsCard = ({
           )}
           <span className="truncate">
             {updateInfo?.outboundEnabled === false ? (
-              "Checks disabled"
+              t("settings.checksDisabled")
             ) : updateLoading ? (
-              "Checking..."
+              t("settings.checking")
             ) : updateInfo?.isUpdateAvailable ? (
-              `v${updateInfo.latestVersion} available`
+              t("settings.versionAvailable", {
+                version: updateInfo.latestVersion ?? "?",
+              })
             ) : updateInfo?.latestVersion ? (
               <span className="flex items-center gap-1.5">
                 <Check
@@ -115,14 +138,56 @@ export const UpdateSettingsCard = ({
                   strokeWidth={3}
                   className="text-emerald-500 flex-shrink-0"
                 />
-                Up to date
+                {t("settings.upToDate")}
               </span>
             ) : updateError ? (
               updateError
             ) : (
-              "Status unknown"
+              t("settings.statusUnknown")
             )}
           </span>
+        </div>
+      </div>
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between px-1">
+          <span className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-neutral-500 uppercase tracking-widest">
+            {t("settings.upstreamStableProgress")}
+          </span>
+        </div>
+        <div className="rounded-xl border-2 border-sky-100 bg-sky-50/60 p-3 text-xs dark:border-sky-900/60 dark:bg-sky-950/20">
+          <div className="flex items-center gap-3">
+            <GitFork className="shrink-0 text-sky-600 dark:text-sky-400" size={18} />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-black text-slate-900 dark:text-white">
+                  {upstream?.latestVersion
+                    ? `v${upstream.latestVersion}`
+                    : t("settings.statusUnknown")}
+                </span>
+                {upstream?.latestUrl && (
+                  <a
+                    className="inline-flex items-center gap-1 font-bold text-sky-700 hover:underline dark:text-sky-300"
+                    href={upstream.latestUrl}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    {t("settings.originalRelease")}
+                    <ExternalLink size={12} />
+                  </a>
+                )}
+              </div>
+              <p className="mt-1 font-semibold text-slate-600 dark:text-neutral-300">
+                {upstreamStatus}
+              </p>
+              {hasValidPublishedAt && upstreamPublishedAt && (
+                <p className="mt-1 text-[10px] font-medium text-slate-400 dark:text-neutral-500">
+                  {t("settings.publishedOn", {
+                    date: upstreamPublishedAt.toLocaleDateString(language),
+                  })}
+                </p>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -133,7 +198,7 @@ export const UpdateSettingsCard = ({
         className="flex items-center justify-center gap-2 h-10 sm:h-11 rounded-xl border-2 border-black dark:border-neutral-700 bg-white dark:bg-neutral-800 text-slate-900 dark:text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] text-[9px] sm:text-[10px] font-black uppercase tracking-wider hover:-translate-y-0.5 transition-all active:translate-y-0 active:shadow-none disabled:opacity-50"
         type="button"
       >
-        Check Now
+        {t("settings.checkNow")}
       </button>
       <a
         href="https://github.com/kinsanka/ExcaliDash_i18n_zh_CN/releases"
@@ -141,13 +206,14 @@ export const UpdateSettingsCard = ({
         rel="noreferrer"
         className="flex items-center justify-center gap-2 h-10 sm:h-11 rounded-xl border-2 border-black dark:border-neutral-700 bg-indigo-600 text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-[9px] sm:text-[10px] font-black uppercase tracking-wider hover:-translate-y-0.5 transition-all active:translate-y-0 active:shadow-none"
       >
-        Releases
+        {t("settings.releases")}
       </a>
     </div>
     {updateInfo?.error && !updateLoading && (
       <div className="mt-4 p-2 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 text-[10px] font-bold text-red-600 dark:text-red-400 italic">
-        Error: {updateInfo.error}
+        {t("settings.errorPrefix", { message: updateInfo.error })}
       </div>
     )}
   </div>
-);
+  );
+};

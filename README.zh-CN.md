@@ -69,8 +69,8 @@ frontend: kinsanka/excalidash-frontend:latest
 如果你想固定版本，建议显式指定 tag：
 
 ```bash
-APP_TAG=v0.6.0-zh.2 docker compose -f docker-compose.prod.yml pull
-APP_TAG=v0.6.0-zh.2 docker compose -f docker-compose.prod.yml up -d
+APP_TAG=v0.6.0-zh.3 docker compose -f docker-compose.prod.yml pull
+APP_TAG=v0.6.0-zh.3 docker compose -f docker-compose.prod.yml up -d
 ```
 
 ## 常用部署说明

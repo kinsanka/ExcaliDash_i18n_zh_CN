@@ -10,6 +10,13 @@ export type UpdateInfo = {
   latestUrl: string | null;
   publishedAt: string | null;
   isUpdateAvailable: boolean | null;
+  upstream: {
+    latestVersion: string | null;
+    latestUrl: string | null;
+    publishedAt: string | null;
+    syncStatus: "synced" | "behind" | "ahead" | "unknown";
+    error?: string;
+  };
   error?: string;
 };
 
@@ -21,4 +28,3 @@ export const getUpdateInfo = async (
   });
   return response.data;
 };
-

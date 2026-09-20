@@ -2,6 +2,12 @@ import type { EnvVarSpec } from "./types";
 
 export const serverEnv: readonly EnvVarSpec[] = [
   {
+    name: "APP_VERSION",
+    group: "Server",
+    kind: "string",
+    doc: "Release tag injected into published backend images for update comparisons.",
+  },
+  {
     name: "PORT",
     group: "Server",
     kind: "number",
@@ -101,4 +107,3 @@ export const databaseEnv: readonly EnvVarSpec[] = [
     doc: "Advisory-lock timeout (seconds) used by the migration entrypoint.",
   },
 ];
-

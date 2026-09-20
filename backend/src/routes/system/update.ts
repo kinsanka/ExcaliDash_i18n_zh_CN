@@ -4,6 +4,8 @@ import { config } from "../../config";
 import type { SystemRouteDeps } from "./index";
 
 type UpdateChannel = "stable" | "prerelease";
+type ReleaseSource = "localized" | "upstream";
+type UpstreamSyncStatus = "synced" | "behind" | "ahead" | "unknown";
 
 type GithubRelease = {
   tag_name?: string;
@@ -21,24 +23,45 @@ type UpdateResponse = {
   latestUrl: string | null;
   publishedAt: string | null;
   isUpdateAvailable: boolean | null;
+  upstream: {
+    latestVersion: string | null;
+    latestUrl: string | null;
+    publishedAt: string | null;
+    syncStatus: UpstreamSyncStatus;
+    error?: string;
+  };
   error?: string;
 };
 
+type LatestReleaseResponse = Omit<UpdateResponse, "currentVersion" | "upstream">;
+
 let UPDATE_CHECK_TTL_MS = 10 * 60 * 1000;
 
-const RELEASES_API_URL =
-  "https://api.github.com/repos/kinsanka/ExcaliDash_i18n_zh_CN/releases?per_page=30";
-const LATEST_RELEASE_URL =
-  "https://github.com/kinsanka/ExcaliDash_i18n_zh_CN/releases/latest";
+const RELEASE_SOURCES: Record<
+  ReleaseSource,
+  { releasesApiUrl: string; latestReleaseUrl: string }
+> = {
+  localized: {
+    releasesApiUrl:
+      "https://api.github.com/repos/kinsanka/ExcaliDash_i18n_zh_CN/releases?per_page=30",
+    latestReleaseUrl:
+      "https://github.com/kinsanka/ExcaliDash_i18n_zh_CN/releases/latest",
+  },
+  upstream: {
+    releasesApiUrl:
+      "https://api.github.com/repos/ZimengXiong/ExcaliDash/releases?per_page=30",
+    latestReleaseUrl:
+      "https://github.com/ZimengXiong/ExcaliDash/releases/latest",
+  },
+};
 
-let cache:
-  | {
-      channel: UpdateChannel;
-      fetchedAt: number;
-      etag: string | null;
-      response: Omit<UpdateResponse, "currentVersion">;
-    }
-  | null = null;
+type UpdateCache = {
+  fetchedAt: number;
+  etag: string | null;
+  response: LatestReleaseResponse;
+};
+
+const caches = new Map<string, UpdateCache>();
 
 const parseChannel = (raw: unknown): UpdateChannel => {
   const normalized = typeof raw === "string" ? raw.trim().toLowerCase() : "";
@@ -85,16 +108,18 @@ const normalizeVersion = (raw: string): string | null => {
 };
 
 const fetchLatestStableFromWeb = async (
+  source: ReleaseSource,
   headers: Record<string, string>,
-): Promise<Omit<UpdateResponse, "currentVersion"> | null> => {
-  const response = await fetch(LATEST_RELEASE_URL, {
+): Promise<LatestReleaseResponse | null> => {
+  const latestReleaseUrl = RELEASE_SOURCES[source].latestReleaseUrl;
+  const response = await fetch(latestReleaseUrl, {
     headers,
     redirect: "manual",
   });
   const location = response.headers.get("location");
   if (response.status < 300 || response.status >= 400 || !location) return null;
 
-  const latestUrl = new URL(location, LATEST_RELEASE_URL).toString();
+  const latestUrl = new URL(location, latestReleaseUrl).toString();
   const tagMatch = /\/releases\/tag\/([^/?#]+)/.exec(latestUrl);
   if (!tagMatch) return null;
 
@@ -111,16 +136,19 @@ const fetchLatestStableFromWeb = async (
   };
 };
 
-export const fetchLatest = async (
-  channel: UpdateChannel
-): Promise<Omit<UpdateResponse, "currentVersion">> => {
+const fetchLatestForSource = async (
+  source: ReleaseSource,
+  channel: UpdateChannel,
+): Promise<LatestReleaseResponse> => {
   const now = Date.now();
-  if (cache && cache.channel === channel && now - cache.fetchedAt < UPDATE_CHECK_TTL_MS) {
+  const cacheKey = `${source}:${channel}`;
+  const cache = caches.get(cacheKey);
+  if (cache && now - cache.fetchedAt < UPDATE_CHECK_TTL_MS) {
     return cache.response;
   }
 
   if (!envOutboundEnabled()) {
-    const response: Omit<UpdateResponse, "currentVersion"> = {
+    const response: LatestReleaseResponse = {
       channel,
       outboundEnabled: false,
       latestVersion: null,
@@ -128,7 +156,7 @@ export const fetchLatest = async (
       publishedAt: null,
       isUpdateAvailable: null,
     };
-    cache = { channel, fetchedAt: now, etag: null, response };
+    caches.set(cacheKey, { fetchedAt: now, etag: null, response });
     return response;
   }
 
@@ -140,26 +168,26 @@ export const fetchLatest = async (
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
-  if (cache && cache.channel === channel && cache.etag) {
+  if (cache?.etag) {
     headers["If-None-Match"] = cache.etag;
   }
 
-  const resp = await fetch(RELEASES_API_URL, { headers });
+  const resp = await fetch(RELEASE_SOURCES[source].releasesApiUrl, { headers });
 
-  if (resp.status === 304 && cache && cache.channel === channel) {
-    cache = { ...cache, fetchedAt: now };
+  if (resp.status === 304 && cache) {
+    caches.set(cacheKey, { ...cache, fetchedAt: now });
     return cache.response;
   }
 
   if (!resp.ok) {
     if (channel === "stable" && (resp.status === 403 || resp.status === 429)) {
-      const fallback = await fetchLatestStableFromWeb(headers);
+      const fallback = await fetchLatestStableFromWeb(source, headers);
       if (fallback) {
-        cache = { channel, fetchedAt: now, etag: null, response: fallback };
+        caches.set(cacheKey, { fetchedAt: now, etag: null, response: fallback });
         return fallback;
       }
     }
-    const response: Omit<UpdateResponse, "currentVersion"> = {
+    const response: LatestReleaseResponse = {
       channel,
       outboundEnabled: true,
       latestVersion: null,
@@ -171,7 +199,7 @@ export const fetchLatest = async (
           ? `GitHub API error: HTTP ${resp.status} (set UPDATE_CHECK_GITHUB_TOKEN to avoid rate limits)`
           : `GitHub API error: HTTP ${resp.status}`,
     };
-    cache = { channel, fetchedAt: now, etag: null, response };
+    caches.set(cacheKey, { fetchedAt: now, etag: null, response });
     return response;
   }
 
@@ -181,7 +209,7 @@ export const fetchLatest = async (
   const latest = pickLatestRelease(releases, channel);
 
   const latestVersion = latest?.tag_name ? normalizeVersion(latest.tag_name) : null;
-  const response: Omit<UpdateResponse, "currentVersion"> = {
+  const response: LatestReleaseResponse = {
     channel,
     outboundEnabled: true,
     latestVersion,
@@ -190,9 +218,15 @@ export const fetchLatest = async (
     isUpdateAvailable: null, // computed once we know currentVersion
   };
 
-  cache = { channel, fetchedAt: now, etag, response };
+  caches.set(cacheKey, { fetchedAt: now, etag, response });
   return response;
 };
+
+export const fetchLatest = (channel: UpdateChannel): Promise<LatestReleaseResponse> =>
+  fetchLatestForSource("localized", channel);
+
+export const fetchUpstreamLatest = (): Promise<LatestReleaseResponse> =>
+  fetchLatestForSource("upstream", "stable");
 
 export const computeIsUpdateAvailable = (
   currentVersion: string | null,
@@ -205,8 +239,26 @@ export const computeIsUpdateAvailable = (
   return compareSemver(latestParsed, currentParsed) > 0;
 };
 
+export const computeUpstreamSyncStatus = (
+  localizedVersion: string | null,
+  upstreamVersion: string | null,
+): UpstreamSyncStatus => {
+  if (!localizedVersion || !upstreamVersion) return "unknown";
+  const localized = parseSemver(localizedVersion);
+  const upstream = parseSemver(upstreamVersion);
+  if (!localized || !upstream) return "unknown";
+
+  const localizedCore = [localized.major, localized.minor, localized.patch];
+  const upstreamCore = [upstream.major, upstream.minor, upstream.patch];
+  for (let index = 0; index < localizedCore.length; index += 1) {
+    if (localizedCore[index] < upstreamCore[index]) return "behind";
+    if (localizedCore[index] > upstreamCore[index]) return "ahead";
+  }
+  return "synced";
+};
+
 export const __resetUpdateCacheForTests = (): void => {
-  cache = null;
+  caches.clear();
 };
 
 export const __setUpdateTtlForTests = (ttlMs: number): void => {
@@ -220,7 +272,14 @@ export const registerUpdateRoutes = (app: express.Express, deps: SystemRouteDeps
       const channel = parseChannel(req.query.channel);
       const currentVersion = deps.getBackendVersion() || null;
 
-      const latest = await fetchLatest(channel);
+      const latestPromise = fetchLatest(channel);
+      const localizedStablePromise =
+        channel === "stable" ? latestPromise : fetchLatest("stable");
+      const [latest, localizedStable, upstreamLatest] = await Promise.all([
+        latestPromise,
+        localizedStablePromise,
+        fetchUpstreamLatest(),
+      ]);
 
       const isUpdateAvailable = computeIsUpdateAvailable(currentVersion, latest.latestVersion);
 
@@ -228,6 +287,16 @@ export const registerUpdateRoutes = (app: express.Express, deps: SystemRouteDeps
         ...latest,
         currentVersion,
         isUpdateAvailable,
+        upstream: {
+          latestVersion: upstreamLatest.latestVersion,
+          latestUrl: upstreamLatest.latestUrl,
+          publishedAt: upstreamLatest.publishedAt,
+          syncStatus: computeUpstreamSyncStatus(
+            localizedStable.latestVersion,
+            upstreamLatest.latestVersion,
+          ),
+          ...(upstreamLatest.error ? { error: upstreamLatest.error } : {}),
+        },
       };
 
       res.status(200).json(payload);

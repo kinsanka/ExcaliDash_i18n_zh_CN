@@ -51,6 +51,7 @@ interface BackupConfig {
 }
 
 interface Config {
+  appVersion: string | null;
   port: number;
   nodeEnv: string;
   isDev: boolean;
@@ -344,6 +345,7 @@ const resolveS3Config = (): S3Config => ({
 });
 
 export const config: Config = {
+  appVersion: readOptionalString("APP_VERSION"),
   port: readNumber("PORT", 8000),
   nodeEnv: resolvedNodeEnv,
   isDev: resolvedNodeEnv === "development",

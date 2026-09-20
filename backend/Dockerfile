@@ -32,6 +32,9 @@ RUN npx tsc
 # Production stage
 FROM node:20-alpine
 
+ARG APP_VERSION=""
+ENV APP_VERSION=${APP_VERSION}
+
 # Install runtime packages and create non-root user
 RUN apk add --no-cache openssl su-exec && \
     addgroup -g 1001 -S nodejs && \
