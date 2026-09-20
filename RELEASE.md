@@ -1,4 +1,4 @@
-# ExcaliDash 中文版 v0.6.0-zh.1
+# ExcaliDash 中文版 v0.6.0-zh.2
 
 发布日期：待定
 
@@ -18,6 +18,7 @@
 - 保留 Excalifont CJK 手绘字体支持。
 - 语言选择接入服务端用户偏好，可在登录后跨会话保存。
 - 生产 Compose 默认使用 `kinsanka/excalidash-backend` 和 `kinsanka/excalidash-frontend`。
+- 更新检查在 GitHub API 限流时自动回退到公开发行版地址，并正确识别 `-zh.N` 稳定版本。
 
 ## 升级
 
@@ -32,8 +33,8 @@ docker compose -f docker-compose.prod.yml logs backend --tail=200
 固定使用本版本：
 
 ```bash
-APP_TAG=v0.6.0-zh.1 docker compose -f docker-compose.prod.yml pull
-APP_TAG=v0.6.0-zh.1 docker compose -f docker-compose.prod.yml up -d
+APP_TAG=v0.6.0-zh.2 docker compose -f docker-compose.prod.yml pull
+APP_TAG=v0.6.0-zh.2 docker compose -f docker-compose.prod.yml up -d
 ```
 
 不要在升级时执行 `docker compose down -v`，否则会删除持久化数据。

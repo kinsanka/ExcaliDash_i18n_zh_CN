@@ -11,12 +11,14 @@ const makeFetchResponse = (opts: {
   status: number;
   json?: unknown;
   etag?: string | null;
+  location?: string | null;
 }): MockFetchResponse => ({
   ok: opts.status >= 200 && opts.status < 300,
   status: opts.status,
   headers: {
     get: (name: string) => {
       if (name.toLowerCase() === "etag") return opts.etag ?? null;
+      if (name.toLowerCase() === "location") return opts.location ?? null;
       return null;
     },
   },
@@ -73,6 +75,52 @@ describe("system/update logic", () => {
     expect(latest.channel).toBe("stable");
     expect(latest.latestVersion).toBe("1.2.0");
     expect(mod.computeIsUpdateAvailable("1.1.0", latest.latestVersion)).toBe(true);
+  });
+
+  it("treats a localized release suffix as stable when GitHub does", async () => {
+    (globalThis as any).fetch = vi.fn().mockResolvedValue(
+      makeFetchResponse({
+        status: 200,
+        json: [
+          {
+            tag_name: "v0.6.0-zh.1",
+            prerelease: false,
+            draft: false,
+            html_url: "localized",
+            published_at: "t1",
+          },
+        ],
+      }),
+    );
+
+    const mod = await import("./update");
+    mod.__resetUpdateCacheForTests();
+    const latest = await mod.fetchLatest("stable");
+
+    expect(latest.latestVersion).toBe("0.6.0-zh.1");
+    expect(latest.latestUrl).toBe("localized");
+  });
+
+  it("falls back to the public latest-release redirect when the API is rate limited", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(makeFetchResponse({ status: 403 }))
+      .mockResolvedValueOnce(
+        makeFetchResponse({
+          status: 302,
+          location:
+            "https://github.com/kinsanka/ExcaliDash_i18n_zh_CN/releases/tag/v0.6.0-zh.1",
+        }),
+      );
+    (globalThis as any).fetch = fetchMock;
+
+    const mod = await import("./update");
+    mod.__resetUpdateCacheForTests();
+    const latest = await mod.fetchLatest("stable");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(latest.error).toBeUndefined();
+    expect(latest.latestVersion).toBe("0.6.0-zh.1");
   });
 
   it("prerelease channel can pick prerelease when newer than stable", async () => {

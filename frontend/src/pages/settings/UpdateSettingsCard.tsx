@@ -136,7 +136,7 @@ export const UpdateSettingsCard = ({
         Check Now
       </button>
       <a
-        href="https://github.com/ZimengXiong/ExcaliDash/releases"
+        href="https://github.com/kinsanka/ExcaliDash_i18n_zh_CN/releases"
         target="_blank"
         rel="noreferrer"
         className="flex items-center justify-center gap-2 h-10 sm:h-11 rounded-xl border-2 border-black dark:border-neutral-700 bg-indigo-600 text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-[9px] sm:text-[10px] font-black uppercase tracking-wider hover:-translate-y-0.5 transition-all active:translate-y-0 active:shadow-none"
@@ -151,4 +151,3 @@ export const UpdateSettingsCard = ({
     )}
   </div>
 );
-

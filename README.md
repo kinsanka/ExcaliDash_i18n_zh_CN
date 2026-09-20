@@ -160,7 +160,7 @@ docker compose -f docker-compose.prod.yml up -d
 # Access the frontend at localhost:6767
 ```
 
-This fork publishes `kinsanka/excalidash-backend` and `kinsanka/excalidash-frontend`. Pin a Chinese release with `APP_TAG=v0.6.0-zh.1` for reproducible deployments.
+This fork publishes `kinsanka/excalidash-backend` and `kinsanka/excalidash-frontend`. Pin a Chinese release with `APP_TAG=v0.6.0-zh.2` for reproducible deployments.
 
 For single-container deployments, `JWT_SECRET` can be omitted and will be auto-generated and persisted in the backend volume on first start. For portability and most production deployments, set a fixed `JWT_SECRET` explicitly.
 

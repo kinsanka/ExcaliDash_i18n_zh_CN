@@ -26,6 +26,11 @@ type UpdateResponse = {
 
 let UPDATE_CHECK_TTL_MS = 10 * 60 * 1000;
 
+const RELEASES_API_URL =
+  "https://api.github.com/repos/kinsanka/ExcaliDash_i18n_zh_CN/releases?per_page=30";
+const LATEST_RELEASE_URL =
+  "https://github.com/kinsanka/ExcaliDash_i18n_zh_CN/releases/latest";
+
 let cache:
   | {
       channel: UpdateChannel;
@@ -52,10 +57,7 @@ const pickLatestRelease = (
     .filter((r) => r && !r.draft)
     .filter((r) => {
       if (channel === "prerelease") return true;
-      if (r.prerelease) return false;
-      const tag = typeof r.tag_name === "string" ? r.tag_name : "";
-      const parsed = parseSemver(tag);
-      return Boolean(parsed && parsed.prerelease.length === 0);
+      return !r.prerelease;
     })
     .map((r) => {
       const tag = typeof r.tag_name === "string" ? r.tag_name : "";
@@ -80,6 +82,33 @@ const normalizeVersion = (raw: string): string | null => {
   if (!parsed) return null;
   const base = `${parsed.major}.${parsed.minor}.${parsed.patch}`;
   return parsed.prerelease.length > 0 ? `${base}-${parsed.prerelease.join(".")}` : base;
+};
+
+const fetchLatestStableFromWeb = async (
+  headers: Record<string, string>,
+): Promise<Omit<UpdateResponse, "currentVersion"> | null> => {
+  const response = await fetch(LATEST_RELEASE_URL, {
+    headers,
+    redirect: "manual",
+  });
+  const location = response.headers.get("location");
+  if (response.status < 300 || response.status >= 400 || !location) return null;
+
+  const latestUrl = new URL(location, LATEST_RELEASE_URL).toString();
+  const tagMatch = /\/releases\/tag\/([^/?#]+)/.exec(latestUrl);
+  if (!tagMatch) return null;
+
+  const latestVersion = normalizeVersion(decodeURIComponent(tagMatch[1]));
+  if (!latestVersion) return null;
+
+  return {
+    channel: "stable",
+    outboundEnabled: true,
+    latestVersion,
+    latestUrl,
+    publishedAt: null,
+    isUpdateAvailable: null,
+  };
 };
 
 export const fetchLatest = async (
@@ -115,8 +144,7 @@ export const fetchLatest = async (
     headers["If-None-Match"] = cache.etag;
   }
 
-  const url = "https://api.github.com/repos/kinsanka/ExcaliDash_i18n_zh_CN/releases?per_page=30";
-  const resp = await fetch(url, { headers });
+  const resp = await fetch(RELEASES_API_URL, { headers });
 
   if (resp.status === 304 && cache && cache.channel === channel) {
     cache = { ...cache, fetchedAt: now };
@@ -124,6 +152,13 @@ export const fetchLatest = async (
   }
 
   if (!resp.ok) {
+    if (channel === "stable" && (resp.status === 403 || resp.status === 429)) {
+      const fallback = await fetchLatestStableFromWeb(headers);
+      if (fallback) {
+        cache = { channel, fetchedAt: now, etag: null, response: fallback };
+        return fallback;
+      }
+    }
     const response: Omit<UpdateResponse, "currentVersion"> = {
       channel,
       outboundEnabled: true,
@@ -131,7 +166,10 @@ export const fetchLatest = async (
       latestUrl: null,
       publishedAt: null,
       isUpdateAvailable: null,
-      error: `GitHub API error: HTTP ${resp.status}`,
+      error:
+        resp.status === 403 || resp.status === 429
+          ? `GitHub API error: HTTP ${resp.status} (set UPDATE_CHECK_GITHUB_TOKEN to avoid rate limits)`
+          : `GitHub API error: HTTP ${resp.status}`,
     };
     cache = { channel, fetchedAt: now, etag: null, response };
     return response;
