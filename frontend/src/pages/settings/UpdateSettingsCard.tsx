@@ -154,9 +154,11 @@ export const UpdateSettingsCard = ({
             {t("settings.upstreamStableProgress")}
           </span>
         </div>
-        <div className="rounded-xl border-2 border-sky-100 bg-sky-50/60 p-3 text-xs dark:border-sky-900/60 dark:bg-sky-950/20">
+        <div className="rounded-xl border-2 border-slate-100 bg-slate-50/50 p-3 text-xs dark:border-neutral-800 dark:bg-neutral-800/30">
           <div className="flex items-center gap-3">
-            <GitFork className="shrink-0 text-sky-600 dark:text-sky-400" size={18} />
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-400">
+              <GitFork size={16} />
+            </div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-black text-slate-900 dark:text-white">
@@ -166,7 +168,7 @@ export const UpdateSettingsCard = ({
                 </span>
                 {upstream?.latestUrl && (
                   <a
-                    className="inline-flex items-center gap-1 font-bold text-sky-700 hover:underline dark:text-sky-300"
+                    className="inline-flex items-center gap-1 font-bold text-slate-500 transition-colors hover:text-emerald-600 hover:underline dark:text-neutral-400 dark:hover:text-emerald-400"
                     href={upstream.latestUrl}
                     rel="noreferrer"
                     target="_blank"
@@ -176,7 +178,18 @@ export const UpdateSettingsCard = ({
                   </a>
                 )}
               </div>
-              <p className="mt-1 font-semibold text-slate-600 dark:text-neutral-300">
+              <p
+                className={clsx(
+                  "mt-1 font-semibold",
+                  upstream?.error
+                    ? "text-red-600 dark:text-red-400"
+                    : upstream?.syncStatus === "synced"
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : upstream?.syncStatus === "behind"
+                        ? "text-amber-600 dark:text-amber-400"
+                        : "text-slate-600 dark:text-neutral-300",
+                )}
+              >
                 {upstreamStatus}
               </p>
               {hasValidPublishedAt && upstreamPublishedAt && (
