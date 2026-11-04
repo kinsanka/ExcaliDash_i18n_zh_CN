@@ -1,9 +1,10 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useLayoutEffect, useRef } from "react";
 import type { MutableRefObject } from "react";
 import { applyUploadedFileRefs, getFilesDelta } from "./shared";
 import type { UploadedFileRefs } from "./shared";
 
 type UseEditorSceneApiParams = {
+  canEdit: boolean;
   drawingId: string | undefined;
   excalidrawAPIRef: MutableRefObject<any>;
   isSyncing: MutableRefObject<boolean>;
@@ -35,6 +36,7 @@ type UseEditorSceneApiParams = {
  * already uploaded), schedules a save, and kicks off the per-file upload scan.
  */
 export const useEditorSceneApi = ({
+  canEdit,
   drawingId,
   excalidrawAPIRef,
   isSyncing,
@@ -51,10 +53,14 @@ export const useEditorSceneApi = ({
   setIsReady,
 }: UseEditorSceneApiParams) => {
   const patchedAddFilesApisRef = useRef<WeakSet<object>>(new WeakSet());
+  const canEditRef = useRef(canEdit);
+  useLayoutEffect(() => {
+    canEditRef.current = canEdit;
+  }, [canEdit]);
 
   const emitFilesDeltaIfNeeded = useCallback(
     (nextFiles: Record<string, any>) => {
-      if (!socketRef.current || !drawingId) return false;
+      if (!canEditRef.current || !socketRef.current || !drawingId) return false;
       const filesDelta = getFilesDelta(
         lastSyncedFilesRef.current,
         nextFiles || {},
@@ -98,7 +104,7 @@ export const useEditorSceneApi = ({
             ? filesInput
             : Object.values(filesInput || {});
           originalAddFiles(normalizedFiles);
-          if (isSyncing.current) return;
+          if (!canEditRef.current || isSyncing.current) return;
           const nextFiles = api.getFiles?.() || {};
           const didEmit = emitFilesDeltaIfNeeded(nextFiles);
           if (
@@ -139,4 +145,3 @@ export const useEditorSceneApi = ({
 
   return { emitFilesDeltaIfNeeded, setExcalidrawAPI };
 };
-

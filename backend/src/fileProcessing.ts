@@ -14,12 +14,18 @@
  * because the shipped client rehydrates `/api/files/` refs.
  */
 import type { PrismaClient } from "./generated/client";
+import { randomUUID } from "node:crypto";
+import {
+  hasDrawingFileContent,
+  storeDrawingFileOnce,
+} from "./drawingFileStore";
 import {
   isS3Enabled,
   getS3Config,
   uploadBuffer,
   getPublicUrl,
   buildS3Key,
+  deleteS3Object,
 } from "./s3";
 
 /**
@@ -59,6 +65,23 @@ export const decodeDataURL = (
   }
 };
 
+/** Reclaim only this request's fresh generation when another row won. */
+export const cleanupUnusedS3Upload = async (
+  freshKey: string,
+  stored: { storage: string; s3Key: string | null },
+): Promise<void> => {
+  if (stored.storage === "s3" && stored.s3Key === freshKey) return;
+  try {
+    await deleteS3Object(freshKey);
+  } catch (error) {
+    // The winning upload remains valid even if compensation is unavailable.
+    console.warn("[files] Failed to cleanup unused S3 upload", {
+      freshKey,
+      error,
+    });
+  }
+};
+
 /**
  * Scan a drawing's files record for base64 dataURLs, store them in the
  * DrawingFile store (S3 or db bytes depending on config), and replace the
@@ -88,7 +111,9 @@ export const internDrawingFiles = async (
       // Reject path-traversal candidates rather than silently storing them
       // under a forged key. Drop from output so the bad entry never reaches
       // the database either.
-      console.warn(`[files] Skipping file with invalid id: ${JSON.stringify(fileId)}`);
+      console.warn(
+        `[files] Skipping file with invalid id: ${JSON.stringify(fileId)}`,
+      );
       delete result[fileId];
       return;
     }
@@ -102,60 +127,73 @@ export const internDrawingFiles = async (
     const decoded = decodeDataURL(dataURL);
     if (!decoded) return;
 
+    // File ids are immutable content hashes, just as on the raw upload route.
+    // A stale client's inline copy must not rewrite bytes used by the current
+    // scene or retained snapshots, even if its scene save later conflicts.
+    const existing = await prisma.drawingFile.findUnique({
+      where: { drawingId_fileId: { drawingId, fileId } },
+    });
+    if (existing && hasDrawingFileContent(existing)) {
+      result[fileId] = {
+        ...file,
+        mimeType: existing.mimeType,
+        dataURL:
+          cfg?.publicUrl && existing.storage === "s3" && existing.s3Key
+            ? getPublicUrl(existing.s3Key)
+            : `/api/files/${drawingId}/${fileId}`,
+      };
+      return;
+    }
+
     const sizeBytes = decoded.buffer.length;
 
     if (s3Enabled) {
       const ext = MIME_TO_EXT[decoded.mimeType] ?? "bin";
-      const s3Key = buildS3Key(userId, drawingId, fileId, ext);
+      const s3Key = buildS3Key(userId, drawingId, fileId, ext, randomUUID());
 
       await uploadBuffer(s3Key, decoded.buffer, decoded.mimeType);
 
       // Drawing-scoped access URL: a file id alone would be ambiguous
       // because the same content hash legitimately repeats across drawings.
-      const accessUrl = cfg?.publicUrl
-        ? getPublicUrl(s3Key)
-        : `/api/files/${drawingId}/${fileId}`;
-
-      await prisma.drawingFile.upsert({
-        where: { drawingId_fileId: { drawingId, fileId } },
-        create: {
-          drawingId,
-          fileId,
-          mimeType: decoded.mimeType,
-          sizeBytes,
-          storage: "s3",
-          s3Key,
-          data: null,
-        },
-        update: { storage: "s3", s3Key, data: null, mimeType: decoded.mimeType, sizeBytes },
-      });
-
-      result[fileId] = { ...file, dataURL: accessUrl };
-      return;
-    }
-
-    // Database-bytes mode: store the raw bytes inline in DrawingFile.data.
-    await prisma.drawingFile.upsert({
-      where: { drawingId_fileId: { drawingId, fileId } },
-      create: {
+      const stored = await storeDrawingFileOnce(prisma, {
         drawingId,
         fileId,
         mimeType: decoded.mimeType,
         sizeBytes,
-        storage: "db",
-        s3Key: null,
-        data: decoded.buffer,
-      },
-      update: {
-        storage: "db",
-        s3Key: null,
-        data: decoded.buffer,
-        mimeType: decoded.mimeType,
-        sizeBytes,
-      },
-    });
+        storage: "s3",
+        s3Key,
+        data: null,
+      });
+      await cleanupUnusedS3Upload(s3Key, stored);
+      result[fileId] = {
+        ...file,
+        mimeType: stored.mimeType,
+        dataURL:
+          cfg?.publicUrl && stored.storage === "s3" && stored.s3Key
+            ? getPublicUrl(stored.s3Key)
+            : `/api/files/${drawingId}/${fileId}`,
+      };
+      return;
+    }
 
-    result[fileId] = { ...file, dataURL: `/api/files/${drawingId}/${fileId}` };
+    // Database-bytes mode: store the raw bytes inline in DrawingFile.data.
+    const stored = await storeDrawingFileOnce(prisma, {
+      drawingId,
+      fileId,
+      mimeType: decoded.mimeType,
+      sizeBytes,
+      storage: "db",
+      s3Key: null,
+      data: decoded.buffer,
+    });
+    result[fileId] = {
+      ...file,
+      mimeType: stored.mimeType,
+      dataURL:
+        cfg?.publicUrl && stored.storage === "s3" && stored.s3Key
+          ? getPublicUrl(stored.s3Key)
+          : `/api/files/${drawingId}/${fileId}`,
+    };
   };
 
   const entries = Object.entries(files);
@@ -180,6 +218,8 @@ export const internDrawingFiles = async (
  * already stored (the diff between Drawing.files's processed entries
  * and the preview field gets ever larger over time).
  *
+ * Also rebase managed references when duplicating a drawing so its preview
+ * remains usable after the source is deleted or stops being shared.
  * Best-effort string substitution: works because the same dataURL
  * string is character-identical in both `files[fileId].dataURL` and
  * the preview SVG's `<image href="...">` attribute. If frontend
@@ -202,8 +242,7 @@ export const rewritePreviewForInternedFiles = (
       !processed ||
       typeof original.dataURL !== "string" ||
       typeof processed.dataURL !== "string" ||
-      original.dataURL === processed.dataURL ||
-      !original.dataURL.startsWith("data:")
+      original.dataURL === processed.dataURL
     ) {
       continue;
     }
@@ -211,4 +250,3 @@ export const rewritePreviewForInternedFiles = (
   }
   return rewritten;
 };
-

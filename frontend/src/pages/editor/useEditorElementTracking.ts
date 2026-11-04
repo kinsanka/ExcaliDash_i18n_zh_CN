@@ -59,4 +59,3 @@ export const useEditorElementTracking = () => {
     recordElementVersion,
   };
 };
-

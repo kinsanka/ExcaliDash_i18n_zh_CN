@@ -34,7 +34,8 @@ export const registerDrawingListRoutes = (
 
   const clampLimit = (raw: string | undefined): number => {
     const parsed = raw ? Number.parseInt(raw, 10) : undefined;
-    if (parsed === undefined || !Number.isFinite(parsed)) return DEFAULT_PAGE_SIZE;
+    if (parsed === undefined || !Number.isFinite(parsed))
+      return DEFAULT_PAGE_SIZE;
     return Math.min(Math.max(parsed, 1), MAX_PAGE_SIZE);
   };
   const clampOffset = (raw: string | undefined): number => {
@@ -160,6 +161,7 @@ export const registerDrawingListRoutes = (
         version: true,
         createdAt: true,
         updatedAt: true,
+        userId: true,
         user: { select: { id: true, name: true } },
       };
 
@@ -176,7 +178,11 @@ export const registerDrawingListRoutes = (
         take: parsedLimit,
         skip: parsedOffset,
       };
-      if (!shouldIncludeData) queryOptions.select = summarySelect;
+      if (shouldIncludeData) {
+        queryOptions.include = { user: { select: { name: true } } };
+      } else {
+        queryOptions.select = summarySelect;
+      }
 
       const [drawings, totalCount] = await Promise.all([
         prisma.drawing.findMany(queryOptions),
@@ -226,7 +232,11 @@ export const registerDrawingListRoutes = (
       const principal = await getRequestPrincipal(req);
       const { id } = req.params;
 
-      const access = await getDrawingAccess({ prisma, principal, drawingId: id });
+      const access = await getDrawingAccess({
+        prisma,
+        principal,
+        drawingId: id,
+      });
       if (!canViewDrawing(access)) {
         if (respondWithAuthErrorIfPresent(req, res)) return;
         return res.status(404).json({
@@ -254,7 +264,10 @@ export const registerDrawingListRoutes = (
         return res.status(304).end();
       }
 
-      return res.json({ preview: drawing.preview ?? null, updatedAt: updatedAtMs });
+      return res.json({
+        preview: drawing.preview ?? null,
+        updatedAt: updatedAtMs,
+      });
     }),
   );
 
@@ -337,6 +350,7 @@ export const registerDrawingListRoutes = (
         createdAt: true,
         updatedAt: true,
         userId: true,
+        user: { select: { name: true } },
         permissions: {
           where: { granteeUserId: req.user.id },
           select: { permission: true },
@@ -349,7 +363,11 @@ export const registerDrawingListRoutes = (
         take: parsedLimit,
         skip: parsedOffset,
       };
-      if (!shouldIncludeData) queryOptions.select = summarySelect;
+      if (shouldIncludeData) {
+        queryOptions.include = { user: { select: { name: true } } };
+      } else {
+        queryOptions.select = summarySelect;
+      }
 
       const [drawings, totalCount] = await Promise.all([
         prisma.drawing.findMany(queryOptions),
@@ -367,6 +385,8 @@ export const registerDrawingListRoutes = (
           // Collections are owner-scoped; don't leak the owner's collection ids to viewers.
           collectionId: null,
           accessLevel: perm,
+          creatorName: d.user?.name ?? null,
+          user: undefined,
         };
       };
 
@@ -393,6 +413,4 @@ export const registerDrawingListRoutes = (
       });
     }),
   );
-
 };
-

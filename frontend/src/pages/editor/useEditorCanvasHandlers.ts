@@ -97,8 +97,7 @@ export const useEditorCanvasHandlers = ({
       if (isUnmountingRef.current) return;
       if (isSyncingRef.current) return;
       latestAppStateRef.current = appState;
-      const currentFiles =
-        files || excalidrawAPIRef.current?.getFiles() || {};
+      const currentFiles = files || excalidrawAPIRef.current?.getFiles() || {};
       if (Object.keys(currentFiles).length > 0) {
         latestFilesRef.current = currentFiles;
       }
@@ -221,18 +220,14 @@ export const useEditorCanvasHandlers = ({
   );
 
   useEffect(() => {
-    if (!drawingId || !isReady) return;
+    if (!canEdit || !drawingId || !isReady) return;
     const interval = window.setInterval(() => {
       if (isUnmountingRef.current) return;
       if (isSyncingRef.current) return;
       if (!excalidrawAPIRef.current) return;
       const nextFiles = excalidrawAPIRef.current.getFiles?.() || {};
       const didEmit = emitFilesDeltaIfNeeded(nextFiles);
-      if (
-        didEmit &&
-        latestAppStateRef.current &&
-        debouncedSaveRef.current
-      ) {
+      if (didEmit && latestAppStateRef.current && debouncedSaveRef.current) {
         hasSceneChangesSinceLoadRef.current = true;
         lastLocalChangeAtRef.current = Date.now();
         debouncedSaveRef.current(
@@ -246,6 +241,7 @@ export const useEditorCanvasHandlers = ({
     }, FILES_POLL_INTERVAL_MS);
     return () => window.clearInterval(interval);
   }, [
+    canEdit,
     debouncedSavePreview,
     debouncedSaveRef,
     drawingId,
@@ -262,4 +258,3 @@ export const useEditorCanvasHandlers = ({
 
   return { handleCanvasChange, handleCanvasDropCapture };
 };
-

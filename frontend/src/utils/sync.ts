@@ -1,6 +1,8 @@
 export const reconcileElements = (
   localElements: readonly any[],
-  remoteElements: readonly any[]
+  remoteElements: readonly any[],
+  localAppState?: any,
+  preferLocalOnEqual = false,
 ): any[] => {
   const localMap = new Map<string, any>();
 
@@ -55,33 +57,40 @@ export const reconcileElements = (
       return;
     }
 
-    const remoteVersion = getVersion(remoteEl);
-    const localVersion = getVersion(localEl);
-
-    if (remoteVersion > localVersion) {
-      localMap.set(remoteEl.id, remoteEl);
+    if (
+      localEl.id === localAppState?.editingTextElement?.id ||
+      localEl.id === localAppState?.resizingElement?.id ||
+      localEl.id === localAppState?.newElement?.id
+    ) {
       return;
     }
 
-    if (remoteVersion < localVersion) {
+    const remoteVersion = getVersion(remoteEl);
+    const localVersion = getVersion(localEl);
+    if (remoteVersion !== localVersion) {
+      if (remoteVersion > localVersion) localMap.set(remoteEl.id, remoteEl);
+      return;
+    }
+
+    // Excalidraw resolves concurrent versions by the lowest nonce. Arrival
+    // order and peers' wall clocks must not make equal-version edits diverge.
+    const remoteNonce = getVersionNonce(remoteEl);
+    const localNonce = getVersionNonce(localEl);
+    if (remoteNonce !== localNonce) {
+      if (remoteNonce < localNonce) localMap.set(remoteEl.id, remoteEl);
       return;
     }
 
     const remoteUpdated = getUpdated(remoteEl);
     const localUpdated = getUpdated(localEl);
-
-    if (remoteUpdated > localUpdated) {
-      localMap.set(remoteEl.id, remoteEl);
+    if (remoteUpdated !== localUpdated) {
+      if (remoteUpdated > localUpdated) localMap.set(remoteEl.id, remoteEl);
       return;
     }
 
-    if (
-      remoteUpdated === localUpdated &&
-      getVersionNonce(remoteEl) !== getVersionNonce(localEl)
-    ) {
-      localMap.set(remoteEl.id, remoteEl);
-      return;
-    }
+    // An HTTP snapshot may predate a live interaction with equal metadata.
+    // Socket frames still accept changing content in their delivery order.
+    if (preferLocalOnEqual) return;
 
     // If the metadata says "equal" but content differs, accept the remote element.
     // This enables live shape creation/move frames that don't bump version fields.
@@ -100,9 +109,10 @@ export const reconcileElements = (
 
 export const applyElementOrder = (
   elements: readonly any[],
-  elementOrder: readonly string[] | undefined | null
+  elementOrder: readonly string[] | undefined | null,
 ): any[] => {
-  if (!Array.isArray(elementOrder) || elementOrder.length === 0) return [...elements];
+  if (!Array.isArray(elementOrder) || elementOrder.length === 0)
+    return [...elements];
 
   const byId = new Map<string, any>();
   for (const el of elements) {

@@ -79,4 +79,3 @@ export const backupEnv: readonly EnvVarSpec[] = [
     doc: "Number of days to retain backups before pruning.",
   },
 ];
-

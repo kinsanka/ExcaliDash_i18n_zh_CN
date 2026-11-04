@@ -4,7 +4,6 @@ import {
   ArrowRight,
   ArrowUp,
   CheckSquare,
-  ChevronDown,
   Copy,
   Folder,
   Inbox,
@@ -16,7 +15,9 @@ import {
 import clsx from "clsx";
 import type { DrawingSortField, SortDirection } from "../../api";
 import type { Collection } from "../../types";
+import { PlayfulSelect } from "../../components/PlayfulSelect";
 import { NewDrawingControl } from "./NewDrawingControl";
+import { useLocale } from "../../context/useLocale";
 
 type SortOption = {
   field: DrawingSortField;
@@ -29,8 +30,8 @@ type DashboardToolbarProps = {
   searchInputRef: React.RefObject<HTMLInputElement>;
   sortConfig: { field: DrawingSortField; direction: SortDirection };
   sortOptions: SortOption[];
-  currentSortOption: SortOption;
-  showSortMenu: boolean;
+  currentSortOption?: SortOption;
+  showSortMenu?: boolean;
   sortedDrawingsCount: number;
   allSelected: boolean;
   hasSelection: boolean;
@@ -42,7 +43,7 @@ type DashboardToolbarProps = {
   selectedCount: number;
   collections: Collection[];
   onSearchChange: (value: string) => void;
-  onShowSortMenuChange: (value: boolean) => void;
+  onShowSortMenuChange?: (value: boolean) => void;
   onSortFieldChange: (field: DrawingSortField) => void;
   onSortDirectionToggle: () => void;
   onSelectAll: () => void;
@@ -60,8 +61,6 @@ export const DashboardToolbar: React.FC<DashboardToolbarProps> = ({
   searchInputRef,
   sortConfig,
   sortOptions,
-  currentSortOption,
-  showSortMenu,
   sortedDrawingsCount,
   allSelected,
   hasSelection,
@@ -73,7 +72,6 @@ export const DashboardToolbar: React.FC<DashboardToolbarProps> = ({
   selectedCount,
   collections,
   onSearchChange,
-  onShowSortMenuChange,
   onSortFieldChange,
   onSortDirectionToggle,
   onSelectAll,
@@ -85,6 +83,7 @@ export const DashboardToolbar: React.FC<DashboardToolbarProps> = ({
   onCreateDrawing,
   onViewerActionError,
 }) => {
+  const { t } = useLocale();
   const canModifySelection =
     !isSharedView &&
     (!isSharedCollection || currentCollection?.sharedRole === "edit");
@@ -96,7 +95,7 @@ export const DashboardToolbar: React.FC<DashboardToolbarProps> = ({
           <input
             ref={searchInputRef}
             type="text"
-            placeholder="Search drawings..."
+            placeholder={t("dashboard.searchPlaceholder")}
             value={search}
             onChange={(event) => onSearchChange(event.target.value)}
             className="w-full pl-10 pr-12 py-2.5 bg-white dark:bg-neutral-900 border-2 border-black dark:border-neutral-700 rounded-xl focus:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:focus:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.2)] outline-none transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] placeholder:text-slate-400 dark:placeholder:text-neutral-500 text-sm text-slate-900 dark:text-white"
@@ -112,72 +111,27 @@ export const DashboardToolbar: React.FC<DashboardToolbarProps> = ({
           </div>
         </div>
         <div className="flex items-center gap-2 p-1 flex-wrap">
-          <div className="relative">
-            <button
-              onClick={(event) => {
-                event.stopPropagation();
-                onShowSortMenuChange(!showSortMenu);
-              }}
-              className={clsx(
-                "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-bold transition-all border-2 border-black dark:border-neutral-700 whitespace-nowrap h-[42px] w-full sm:w-[180px]",
-                "bg-white dark:bg-neutral-900 text-slate-700 dark:text-neutral-300 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:hover:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.2)] hover:-translate-y-0.5 hover:bg-indigo-50 dark:hover:bg-indigo-900/30",
-              )}
-            >
-              <span className="text-indigo-600 dark:text-indigo-400 flex-shrink-0">
-                {currentSortOption.icon}
-              </span>
-              <span className="whitespace-nowrap flex-1 text-left">
-                {currentSortOption.label}
-              </span>
-              <ChevronDown
-                size={16}
-                className="text-slate-400 dark:text-neutral-500 flex-shrink-0"
-              />
-            </button>
-            {showSortMenu && (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => onShowSortMenuChange(false)}
-                />
-                <div className="absolute top-full left-0 mt-2 z-50 bg-white dark:bg-neutral-800 rounded-lg border-2 border-black dark:border-neutral-700 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.2)] py-1 min-w-[180px]">
-                  {sortOptions.map((option) => (
-                    <button
-                      key={option.field}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onSortFieldChange(option.field);
-                      }}
-                      className={clsx(
-                        "w-full px-3 py-2 text-sm text-left flex items-center gap-2 transition-colors",
-                        sortConfig.field === option.field
-                          ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-bold"
-                          : "text-slate-600 dark:text-neutral-300 hover:bg-slate-50 dark:hover:bg-neutral-700 hover:text-indigo-600 dark:hover:text-indigo-400",
-                      )}
-                    >
-                      <span className="text-indigo-600 dark:text-indigo-400">
-                        {option.icon}
-                      </span>
-                      <span>{option.label}</span>
-                      {sortConfig.field === option.field && (
-                        <span className="ml-auto text-xs">✓</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
+          <PlayfulSelect
+            ariaLabel={t("dashboard.sort.label")}
+            value={sortConfig.field}
+            onChange={(value) => onSortFieldChange(value as DrawingSortField)}
+            options={sortOptions.map((option) => ({
+              value: option.field,
+              label: option.label,
+              icon: option.icon,
+            }))}
+            buttonClassName="h-[42px] w-full sm:w-[190px] px-3"
+            menuClassName="min-w-[190px]"
+          />
           <button
             onClick={onSortDirectionToggle}
             className={clsx(
-              "flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all border-2 border-black dark:border-neutral-700 h-[42px] min-w-[42px]",
-              "bg-white dark:bg-neutral-900 text-indigo-600 dark:text-indigo-400 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:hover:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.2)] hover:-translate-y-0.5 hover:bg-indigo-50 dark:hover:bg-indigo-900/30",
+              "ui-icon-button h-[42px] min-w-[42px] text-indigo-600 dark:text-indigo-400",
             )}
             title={
               sortConfig.direction === "asc"
-                ? "Sort Ascending"
-                : "Sort Descending"
+                ? t("dashboard.sort.ascending")
+                : t("dashboard.sort.descending")
             }
           >
             {sortConfig.direction === "asc" ? (
@@ -194,12 +148,16 @@ export const DashboardToolbar: React.FC<DashboardToolbarProps> = ({
             onClick={onSelectAll}
             disabled={sortedDrawingsCount === 0}
             className={clsx(
-              "h-[42px] w-[42px] flex items-center justify-center rounded-xl border-2 transition-all",
+              "ui-icon-button h-[42px] w-[42px]",
               sortedDrawingsCount > 0
-                ? "bg-white dark:bg-neutral-800 border-black dark:border-neutral-700 text-indigo-600 dark:text-indigo-400 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:hover:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.2)] hover:-translate-y-1 hover:bg-indigo-50 dark:hover:bg-indigo-900/30"
-                : "bg-slate-100 dark:bg-neutral-900 border-slate-300 dark:border-neutral-800 text-slate-300 dark:text-neutral-700 cursor-not-allowed",
+                ? "text-indigo-600 dark:text-indigo-400"
+                : "",
             )}
-            title={allSelected ? "Deselect All" : "Select All"}
+            title={
+              allSelected
+                ? t("dashboard.deselectAll")
+                : t("dashboard.selectAll")
+            }
           >
             {allSelected ? <CheckSquare size={20} /> : <Square size={20} />}
           </button>
@@ -207,12 +165,16 @@ export const DashboardToolbar: React.FC<DashboardToolbarProps> = ({
             onClick={onBulkDeleteClick}
             disabled={!hasSelection || !canModifySelection}
             className={clsx(
-              "h-[42px] w-[42px] flex items-center justify-center rounded-xl border-2 transition-all",
+              "ui-icon-button h-[42px] w-[42px]",
               hasSelection && canModifySelection
-                ? "bg-white dark:bg-neutral-800 border-black dark:border-neutral-700 text-rose-600 dark:text-rose-400 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:hover:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.2)] hover:-translate-y-1 hover:bg-rose-50 dark:hover:bg-rose-900/30"
-                : "bg-slate-100 dark:bg-neutral-900 border-slate-300 dark:border-neutral-800 text-slate-300 dark:text-neutral-700 cursor-not-allowed",
+                ? "text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/30"
+                : "",
             )}
-            title={isTrashView ? "Delete Permanently" : "Move to Trash"}
+            title={
+              isTrashView
+                ? t("dashboard.deletePermanently")
+                : t("dashboard.moveToTrash")
+            }
           >
             <Trash2 size={20} />
           </button>
@@ -220,12 +182,12 @@ export const DashboardToolbar: React.FC<DashboardToolbarProps> = ({
             onClick={onBulkDuplicate}
             disabled={!hasSelection || isTrashView || !canModifySelection}
             className={clsx(
-              "h-[42px] w-[42px] flex items-center justify-center rounded-xl border-2 transition-all",
+              "ui-icon-button h-[42px] w-[42px]",
               hasSelection && !isTrashView && canModifySelection
-                ? "bg-white dark:bg-neutral-800 border-black dark:border-neutral-700 text-indigo-600 dark:text-indigo-400 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:hover:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.2)] hover:-translate-y-1 hover:bg-indigo-50 dark:hover:bg-indigo-900/30"
-                : "bg-slate-100 dark:bg-neutral-900 border-slate-300 dark:border-neutral-800 text-slate-300 dark:text-neutral-700 cursor-not-allowed",
+                ? "text-indigo-600 dark:text-indigo-400"
+                : "",
             )}
-            title="Duplicate Selected"
+            title={t("dashboard.duplicateSelected")}
           >
             <Copy size={20} />
           </button>
@@ -236,12 +198,12 @@ export const DashboardToolbar: React.FC<DashboardToolbarProps> = ({
               }
               disabled={!hasSelection || !canModifySelection}
               className={clsx(
-                "h-[42px] w-[42px] flex items-center justify-center rounded-xl border-2 transition-all",
+                "ui-icon-button h-[42px] w-[42px]",
                 hasSelection && canModifySelection
-                  ? "bg-white dark:bg-neutral-800 border-black dark:border-neutral-700 text-emerald-600 dark:text-emerald-400 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:hover:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.2)] hover:-translate-y-1 hover:bg-emerald-50 dark:hover:bg-emerald-900/30"
-                  : "bg-slate-100 dark:bg-neutral-900 border-slate-300 dark:border-neutral-800 text-slate-300 dark:text-neutral-700 cursor-not-allowed",
+                  ? "text-indigo-600 dark:text-indigo-400"
+                  : "",
               )}
-              title="Move Selected"
+              title={t("dashboard.moveSelected")}
             >
               <div className="relative">
                 <Folder size={20} />
@@ -258,15 +220,15 @@ export const DashboardToolbar: React.FC<DashboardToolbarProps> = ({
                   className="fixed inset-0 z-10"
                   onClick={() => onShowBulkMoveMenuChange(false)}
                 />
-                <div className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-neutral-800 rounded-xl border-2 border-black dark:border-neutral-700 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.2)] z-50 py-1 max-h-64 overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 duration-100">
-                  <div className="px-3 py-2 text-[10px] font-bold uppercase text-slate-400 dark:text-neutral-500 tracking-wider border-b border-slate-100 dark:border-neutral-700 mb-1">
-                    Move {selectedCount} items to...
+                <div className="ui-menu absolute right-0 top-full mt-2 w-56 z-50 max-h-64 overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 duration-100">
+                  <div className="px-2.5 py-1.5 text-xs font-semibold text-slate-400 dark:text-neutral-500">
+                    {t("dashboard.moveItemsTo", { count: selectedCount })}
                   </div>
                   <button
                     onClick={() => onBulkMove(null)}
-                    className="w-full px-3 py-2 text-sm text-left flex items-center gap-2 text-slate-600 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                    className="ui-menu-item"
                   >
-                    <Inbox size={14} /> Unorganized
+                    <Inbox size={14} /> {t("sidebar.unorganized")}
                   </button>
                   {collections
                     .filter((collection) => collection.id !== "trash")
@@ -274,7 +236,7 @@ export const DashboardToolbar: React.FC<DashboardToolbarProps> = ({
                       <button
                         key={collection.id}
                         onClick={() => onBulkMove(collection.id)}
-                        className="w-full px-3 py-2 text-sm text-left flex items-center gap-2 text-slate-600 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors truncate"
+                        className="ui-menu-item"
                       >
                         <Folder size={14} />
                         <span className="truncate">{collection.name}</span>
@@ -287,8 +249,8 @@ export const DashboardToolbar: React.FC<DashboardToolbarProps> = ({
         </div>
         <input
           type="file"
+          accept=".excalidash,.excalidraw,.json"
           multiple
-          accept=".json,.excalidraw"
           className="hidden"
           id="dashboard-import"
           onChange={(event) => {
@@ -302,27 +264,30 @@ export const DashboardToolbar: React.FC<DashboardToolbarProps> = ({
               isSharedCollection &&
               currentCollection?.sharedRole !== "edit"
             ) {
-              onViewerActionError("Viewers can't import drawings");
+              onViewerActionError(t("dashboard.viewerCannotImport"));
               return;
             }
             document.getElementById("dashboard-import")?.click();
           }}
           disabled={isTrashView || isSharedView}
           className={clsx(
-            "h-[42px] w-full sm:w-auto flex items-center justify-center gap-2 px-6 rounded-xl border-2 border-black dark:border-neutral-700 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] transition-all font-bold text-sm whitespace-nowrap",
+            "ui-button-secondary h-[42px] w-full px-6 sm:w-auto",
             isTrashView || isSharedView
-              ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-slate-300 dark:border-slate-700 shadow-none cursor-not-allowed"
-              : "bg-emerald-600 dark:bg-neutral-800 text-white hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:hover:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.2)] hover:-translate-y-1 active:translate-y-0 active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:active:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)]",
+              ? ""
+              : "text-indigo-700 dark:text-indigo-300",
           )}
         >
-          <Upload size={18} strokeWidth={2.5} /> Import
+          <Upload size={18} strokeWidth={2.5} /> {t("dashboard.importDrawings")}
         </button>
         <NewDrawingControl
           disabled={isTrashView || isSharedView}
           onCreate={onCreateDrawing}
           canCreate={() => {
-            if (isSharedCollection && currentCollection?.sharedRole !== "edit") {
-              onViewerActionError("Viewers can't create new drawings");
+            if (
+              isSharedCollection &&
+              currentCollection?.sharedRole !== "edit"
+            ) {
+              onViewerActionError(t("dashboard.viewerCannotCreate"));
               return false;
             }
             return true;
@@ -332,4 +297,3 @@ export const DashboardToolbar: React.FC<DashboardToolbarProps> = ({
     </div>
   );
 };
-

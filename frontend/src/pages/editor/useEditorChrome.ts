@@ -1,28 +1,30 @@
-import { useEffect, useState } from 'react';
-import throttle from 'lodash/throttle';
+import { useEffect, useState } from "react";
+import throttle from "lodash/throttle";
 
 type UseEditorChromeOptions = {
   drawingName: string;
   autoHideEnabled: boolean;
   isRenaming: boolean;
+  isShareOpen: boolean;
 };
 
 export const useEditorChrome = ({
   drawingName,
   autoHideEnabled,
   isRenaming,
+  isShareOpen,
 }: UseEditorChromeOptions) => {
   const [isHeaderVisible, setIsHeaderVisible] = useState(true);
 
   useEffect(() => {
     document.title = `${drawingName} - ExcaliDash`;
     return () => {
-      document.title = 'ExcaliDash';
+      document.title = "ExcaliDash";
     };
   }, [drawingName]);
 
   useEffect(() => {
-    if (!autoHideEnabled || isRenaming) {
+    if (!autoHideEnabled || isRenaming || isShareOpen) {
       setIsHeaderVisible(true);
       return;
     }
@@ -53,13 +55,14 @@ export const useEditorChrome = ({
       setIsHeaderVisible(false);
     }, 3000);
 
-    window.addEventListener('mousemove', handleMouseMove, { passive: true });
+    window.addEventListener("mousemove", handleMouseMove, { passive: true });
 
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener("mousemove", handleMouseMove);
+      handleMouseMove.cancel();
       if (hideTimeout !== null) clearTimeout(hideTimeout);
     };
-  }, [autoHideEnabled, isRenaming]);
+  }, [autoHideEnabled, isRenaming, isShareOpen]);
 
   return {
     isHeaderVisible,

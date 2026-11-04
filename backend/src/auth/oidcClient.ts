@@ -1,8 +1,13 @@
 import { Issuer } from "openid-client";
-import { canonicalizeIssuerUrl, resolveIdTokenSignedResponseAlg } from "./oidcRouteHelpers";
+import {
+  canonicalizeIssuerUrl,
+  resolveIdTokenSignedResponseAlg,
+} from "./oidcRouteHelpers";
 import type { RegisterOidcRoutesDeps } from "./oidcRoutes";
 
-export const createOidcClientFactory = (config: RegisterOidcRoutesDeps["config"]) => {
+export const createOidcClientFactory = (
+  config: RegisterOidcRoutesDeps["config"],
+) => {
   let oidcClientPromise: Promise<any> | null = null;
   const selectTokenEndpointAuthMethod = (opts: {
     hasClientSecret: boolean;
@@ -138,4 +143,3 @@ export const createOidcClientFactory = (config: RegisterOidcRoutesDeps["config"]
   };
   return { buildOidcClient, getOidcClient };
 };
-

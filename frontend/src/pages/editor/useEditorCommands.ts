@@ -2,6 +2,7 @@ import { useCallback, useEffect } from "react";
 import type { FormEvent, MutableRefObject } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { translateCurrent } from "../../i18n";
 import * as api from "../../api";
 import { exportFromEditor } from "../../utils/exportUtils";
 import {
@@ -13,6 +14,7 @@ import type { UploadedFileRefs } from "./shared";
 import { saveDrawingKeepalive } from "./keepaliveSave";
 
 type EditorCommandRefs = {
+  historyRestorePending: MutableRefObject<boolean>;
   currentDrawingVersion: MutableRefObject<number | null>;
   excalidrawAPI: MutableRefObject<any>;
   hasSceneChangesSinceLoad: MutableRefObject<boolean>;
@@ -95,14 +97,12 @@ export const useEditorCommands = ({
     const handleKeyDown = async (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "s") {
         e.preventDefault();
-        if (!canEdit) return;
-        if (
-          !(
-            refs.excalidrawAPI.current &&
-            refs.saveData.current &&
-            refs.savePreview.current
-          )
-        ) {
+        if (!canEdit || refs.historyRestorePending.current) return;
+        if (!(
+          refs.excalidrawAPI.current &&
+          refs.saveData.current &&
+          refs.savePreview.current
+        )) {
           return;
         }
         if (!drawingId) return;
@@ -117,7 +117,7 @@ export const useEditorCommands = ({
             suppressErrors: false,
           });
           refs.savePreview.current(drawingId, safeElements, appState, files);
-          toast.success("Saved changes to server");
+          toast.success(translateCurrent("editor.toast.saved"));
         } catch (err) {
           console.error("Failed to save on Ctrl+S", err);
           // enqueueSceneSave surfaces its own conflict/error toast; avoid a
@@ -134,7 +134,7 @@ export const useEditorCommands = ({
     // autosave may have pending edits that would otherwise be lost; a
     // keepalive PUT survives the unload where the normal save pipeline can't.
     const handlePageHide = () => {
-      if (!canEdit || !drawingId) return;
+      if (!canEdit || !drawingId || refs.historyRestorePending.current) return;
       const editor = refs.excalidrawAPI.current;
       if (!editor) return;
       if (!refs.hasSceneChangesSinceLoad.current) return;
@@ -164,7 +164,7 @@ export const useEditorCommands = ({
   const handleRenameSubmit = useCallback(
     async (e: FormEvent) => {
       e.preventDefault();
-      if (!canEdit || !drawingId) return;
+      if (!canEdit || !drawingId || refs.historyRestorePending.current) return;
       const trimmed = newName.trim();
       // Empty or unchanged name: just close the editor, save nothing.
       if (!trimmed || trimmed === drawingName) {
@@ -182,7 +182,7 @@ export const useEditorCommands = ({
       } catch (err) {
         console.error("Failed to rename", err);
         setDrawingName(previousName);
-        toast.error("Failed to rename drawing");
+        toast.error(translateCurrent("editor.toast.renameFailed"));
       }
     },
     [
@@ -190,6 +190,7 @@ export const useEditorCommands = ({
       drawingId,
       drawingName,
       newName,
+      refs,
       setDrawingName,
       setIsRenaming,
       setNewName,
@@ -205,17 +206,15 @@ export const useEditorCommands = ({
   );
 
   const handleBackClick = useCallback(async () => {
-    if (isSavingOnLeave) return;
+    if (isSavingOnLeave || refs.historyRestorePending.current) return;
     setIsSavingOnLeave(true);
     let shouldNavigate = false;
     try {
-      if (
-        !(
-          refs.excalidrawAPI.current &&
-          refs.saveData.current &&
-          refs.savePreview.current
-        )
-      ) {
+      if (!(
+        refs.excalidrawAPI.current &&
+        refs.saveData.current &&
+        refs.savePreview.current
+      )) {
         shouldNavigate = true;
       } else if (!canEdit || !refs.hasSceneChangesSinceLoad.current) {
         shouldNavigate = true;
@@ -232,9 +231,7 @@ export const useEditorCommands = ({
           refs.suspiciousBlankLoad.current &&
           !hasRenderableElements(safeElements)
         ) {
-          toast.warning(
-            "Blank scene detected on load. Skipping save to protect existing data.",
-          );
+          toast.warning(translateCurrent("editor.toast.blankSceneSkipped"));
           shouldNavigate = true;
         } else {
           await Promise.all([
@@ -248,7 +245,7 @@ export const useEditorCommands = ({
       }
     } catch (err) {
       console.error("Failed to save on back navigation", err);
-      toast.error("Failed to save changes. Please retry before leaving.");
+      toast.error(translateCurrent("editor.toast.saveBeforeLeaveFailed"));
     } finally {
       setIsSavingOnLeave(false);
     }
@@ -264,15 +261,20 @@ export const useEditorCommands = ({
     setIsSavingOnLeave,
   ]);
 
-  const handleExportClick = useCallback(() => {
-    if (!refs.excalidrawAPI.current) return;
+  const handleExportClick = useCallback(async () => {
+    if (!refs.excalidrawAPI.current || !drawingId) return;
     const elements =
       refs.excalidrawAPI.current.getSceneElementsIncludingDeleted();
     const appState = refs.excalidrawAPI.current.getAppState();
     const files = refs.excalidrawAPI.current.getFiles() || {};
-    exportFromEditor(drawingName, elements, appState, files);
-    toast.success("Drawing exported");
-  }, [drawingName, refs]);
+    try {
+      await exportFromEditor(drawingId, drawingName, elements, appState, files);
+      toast.success(translateCurrent("editor.toast.exported"));
+    } catch (error) {
+      console.error("Failed to export drawing", error);
+      toast.error(translateCurrent("editor.toast.exportFailed"));
+    }
+  }, [drawingId, drawingName, refs]);
 
   const handleToggleAutoHide = useCallback(() => {
     setAutoHideEnabled(!autoHideEnabled);
@@ -294,4 +296,3 @@ export const useEditorCommands = ({
     handleToggleAutoHide,
   };
 };
-

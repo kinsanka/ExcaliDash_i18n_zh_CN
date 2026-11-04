@@ -53,9 +53,13 @@ const blobToDataUrl = (blob: Blob): Promise<string> =>
 const fetchAsDataUrl = async (
   url: string,
   mimeType: unknown,
+  fallbackUrl?: string,
 ): Promise<string | null> => {
   try {
-    const response = await fetch(url, { credentials: "same-origin" });
+    let response = await fetch(url, { credentials: "same-origin" });
+    if (response.status === 404 && fallbackUrl) {
+      response = await fetch(fallbackUrl, { credentials: "same-origin" });
+    }
     if (!response.ok) return null;
     const blob = await response.blob();
     const dataUrl = await blobToDataUrl(blob);
@@ -93,23 +97,67 @@ export const rehydrateFilesFromUrls = async (
   if (!filesNeedRehydration(files)) return files;
 
   const result: Record<string, any> = { ...files };
-  const entries = Object.entries(files).filter(([, file]) =>
-    isRehydratableRef((file as any)?.dataURL),
-  );
-
-  await Promise.all(
-    entries.map(async ([fileId, file]) => {
-      const dataURL = await fetchAsDataUrl(
-        (file as any).dataURL,
-        (file as any)?.mimeType,
-      );
-      if (dataURL) {
-        result[fileId] = { ...(file as any), dataURL };
-      }
-    }),
-  );
+  await rehydrateFilesProgressive(files, (fileId, file) => {
+    result[fileId] = file;
+  });
 
   return result;
+};
+
+/**
+ * Strict rehydration for portable .excalidraw downloads. Route managed files
+ * through the authenticated same-origin endpoint (also avoiding public-S3
+ * CORS requirements). HTTP(S) references may instead be unmanaged imported
+ * images: when the endpoint returns 404, try their original URL. Reject the
+ * export if any reference remains.
+ */
+export const rehydrateFilesForExport = async (
+  files: Record<string, any> | null | undefined,
+  drawingId: string,
+): Promise<Record<string, any>> => {
+  if (!files || typeof files !== "object") return {};
+
+  const hydrated = { ...files };
+  const entries = Object.entries(files).filter(([, file]) =>
+    isRehydratableRef(file?.dataURL),
+  );
+  for (let i = 0; i < entries.length; i += REHYDRATE_CONCURRENCY) {
+    await Promise.all(
+      entries
+        .slice(i, i + REHYDRATE_CONCURRENCY)
+        .map(async ([fileId, file]) => {
+          const originalUrl = file.dataURL as string;
+          // No file-store metadata reaches the client for public S3 URLs.
+          // Probe the managed endpoint first; only a missing file permits
+          // fallback, never an auth/server/network failure. Explicit managed
+          // /api/files references must stay on the authenticated endpoint.
+          const fallbackUrl = /^https?:\/\//i.test(originalUrl)
+            ? originalUrl
+            : undefined;
+          const dataURL = await fetchAsDataUrl(
+            `/api/files/${encodeURIComponent(drawingId)}/${encodeURIComponent(fileId)}`,
+            file.mimeType,
+            fallbackUrl,
+          );
+          if (dataURL) hydrated[fileId] = { ...file, dataURL };
+        }),
+    );
+  }
+  const unresolved = Object.entries(hydrated)
+    .filter(
+      ([, file]) =>
+        typeof file?.dataURL === "string" &&
+        file.dataURL.length > 0 &&
+        !file.dataURL.startsWith("data:"),
+    )
+    .map(([fileId]) => fileId);
+
+  if (unresolved.length > 0) {
+    throw new Error(
+      `Could not bundle ${unresolved.length} drawing image(s): ${unresolved.join(", ")}`,
+    );
+  }
+  return hydrated;
 };
 
 /**
@@ -162,4 +210,3 @@ export const rehydrateFilesProgressive = async (
   const workerCount = Math.min(REHYDRATE_CONCURRENCY, entries.length);
   await Promise.all(Array.from({ length: workerCount }, () => worker()));
 };
-

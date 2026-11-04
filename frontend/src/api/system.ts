@@ -10,7 +10,7 @@ export type UpdateInfo = {
   latestUrl: string | null;
   publishedAt: string | null;
   isUpdateAvailable: boolean | null;
-  upstream: {
+  upstream?: {
     latestVersion: string | null;
     latestUrl: string | null;
     publishedAt: string | null;

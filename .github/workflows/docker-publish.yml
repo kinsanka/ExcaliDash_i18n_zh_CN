@@ -4,93 +4,104 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Docker tag to publish"
+        description: "Chinese release tag (for example v0.6.7-zh.1)"
         required: true
-        default: "latest"
+        default: "v0.6.7-zh.1"
   push:
     tags:
-      - "v*"
+      - "v*-zh.*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-chinese-release
+  cancel-in-progress: false
 
 env:
   DOCKERHUB_NAMESPACE: kinsanka
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  publish-backend:
-    name: Publish Backend
-    runs-on: ubuntu-latest
-
+  metadata:
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      label: ${{ steps.version.outputs.label }}
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set image tag
-        id: vars
-        shell: bash
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - name: Validate release tag
+        id: version
+        env:
+          REQUESTED_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
-          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            TAG="${{ github.event.inputs.tag }}"
-          else
-            TAG="${GITHUB_REF_NAME}"
+          version="$(tr -d '[:space:]' < VERSION)"
+          if [[ "${REQUESTED_TAG%-zh.*}" != "v${version}" || ! "$REQUESTED_TAG" =~ -zh\.[1-9][0-9]*$ ]]; then
+            echo "Expected v${version}-zh.N release tag" >&2
+            exit 1
           fi
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "tag=$REQUESTED_TAG" >> "$GITHUB_OUTPUT"
+          echo "label=${REQUESTED_TAG#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
+  build:
+    name: Build ${{ matrix.component }}
+    needs: metadata
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [backend, frontend]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Build and push backend
-        uses: docker/build-push-action@v6
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile
-          push: true
-          build-args: |
-            APP_VERSION=${{ steps.vars.outputs.tag }}
-          tags: |
-            ${{ env.DOCKERHUB_NAMESPACE }}/excalidash-backend:${{ steps.vars.outputs.tag }}
-            ${{ env.DOCKERHUB_NAMESPACE }}/excalidash-backend:latest
-
-  publish-frontend:
-    name: Publish Frontend
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set image tag
-        id: vars
-        shell: bash
-        run: |
-          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            TAG="${{ github.event.inputs.tag }}"
-          else
-            TAG="${GITHUB_REF_NAME}"
-          fi
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Build and push frontend
+      - name: Build and publish versioned image
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./frontend/Dockerfile
+          file: ${{ matrix.component }}/Dockerfile
+          platforms: linux/amd64,linux/arm64
           push: true
           build-args: |
-            VITE_APP_VERSION=${{ steps.vars.outputs.tag }}
-            VITE_APP_BUILD_LABEL=${{ github.sha }}
-          tags: |
-            ${{ env.DOCKERHUB_NAMESPACE }}/excalidash-frontend:${{ steps.vars.outputs.tag }}
-            ${{ env.DOCKERHUB_NAMESPACE }}/excalidash-frontend:latest
+            APP_BUILD_LABEL=${{ needs.metadata.outputs.label }}
+            VITE_APP_BUILD_LABEL=${{ needs.metadata.outputs.label }}
+          tags: ${{ env.DOCKERHUB_NAMESPACE }}/excalidash-${{ matrix.component }}:${{ needs.metadata.outputs.tag }}
+          cache-from: type=gha,scope=chinese-${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=chinese-${{ matrix.component }}
+
+  promote:
+    name: Verify and promote image pair
+    needs: [metadata, build]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Verify both architectures
+        env:
+          IMAGE_TAG: ${{ needs.metadata.outputs.tag }}
+        run: |
+          for component in backend frontend; do
+            docker buildx imagetools inspect "${DOCKERHUB_NAMESPACE}/excalidash-${component}:${IMAGE_TAG}" --raw | jq -e '
+              [.manifests[].platform | select(.os == "linux") | .architecture] as $architectures
+              | ($architectures | index("amd64") != null) and ($architectures | index("arm64") != null)
+            '
+          done
+      - name: Verify frontend ports and non-root execution
+        env:
+          IMAGE_TAG: ${{ needs.metadata.outputs.tag }}
+        run: sh scripts/test-frontend-container.sh "${DOCKERHUB_NAMESPACE}/excalidash-frontend:${IMAGE_TAG}"
+      - name: Promote verified images
+        env:
+          IMAGE_TAG: ${{ needs.metadata.outputs.tag }}
+        run: |
+          for component in backend frontend; do
+            image="${DOCKERHUB_NAMESPACE}/excalidash-${component}"
+            docker buildx imagetools create --tag "${image}:latest" "${image}:${IMAGE_TAG}"
+          done

@@ -99,4 +99,3 @@ export const revalidateRoomSockets = async (params: {
     }
   }
 };
-

@@ -164,11 +164,12 @@ export const useEditorBroadcast = ({
     () => () => {
       if (timeoutRef.current) {
         window.clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+        trailingArgsRef.current = null;
       }
     },
-    [],
+    [drawingId],
   );
 
   return broadcastChanges;
 };
-

@@ -4,6 +4,7 @@ type DrawingsCacheEntry = {
   userId: string;
   bytes: number;
 };
+
 export type DrawingsCacheKeyParts = {
   userId: string;
   searchTerm: string;

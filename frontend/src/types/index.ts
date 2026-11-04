@@ -7,6 +7,7 @@ export interface DrawingSummary {
   version: number;
   preview?: string | null;
   accessLevel?: "none" | "view" | "edit" | "owner";
+  userId?: string;
   creatorName?: string | null;
 }
 export interface Drawing extends DrawingSummary {
@@ -22,6 +23,7 @@ export interface Collection {
   isOwner?: boolean;
   isShared?: boolean;
 }
+
 export type CollectionShareRole = "view" | "edit";
 
 export interface CollectionShareUser {

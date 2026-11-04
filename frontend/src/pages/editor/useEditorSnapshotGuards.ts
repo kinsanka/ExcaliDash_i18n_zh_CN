@@ -146,4 +146,3 @@ export const useEditorSnapshotGuards = ({
     normalizeImageElementStatus,
   };
 };
-

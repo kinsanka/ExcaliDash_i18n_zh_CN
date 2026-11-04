@@ -1,13 +1,14 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Layout } from "../components/Layout";
 import { useAuth } from "../context/AuthContext";
 import * as api from "../api";
 import { Toaster } from "sonner";
-import { getPasswordPolicy, validatePassword } from "../utils/passwordPolicy";
+import { getPasswordPolicy } from "../utils/passwordPolicy";
+import { getApiErrorMessage } from "../utils/getApiErrorMessage";
 import { AccessControlCard } from "./admin/AccessControlCard";
 import { AdminHeader, AdminStatusMessages } from "./admin/AdminShell";
-import { CreateUserForm } from "./admin/CreateUserForm";
+import { CreateUserForm, type CreateUserInput } from "./admin/CreateUserForm";
 import { LoginRateLimitCard } from "./admin/LoginRateLimitCard";
 import { UserActionModals } from "./admin/UserActionModals";
 import { UsersTable } from "./admin/UsersTable";
@@ -21,10 +22,13 @@ import {
   readImpersonationState,
   USER_KEY,
 } from "../utils/impersonation";
+import { useLocale } from "../context/useLocale";
 export const Admin: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useLocale();
   const { user: authUser, authEnabled } = useAuth();
-  const isAdmin = authUser?.role === "ADMIN";
+  const isSingleUserOwner = authEnabled === false;
+  const isAdmin = isSingleUserOwner || authUser?.role === "ADMIN";
   const passwordPolicy = getPasswordPolicy();
   const {
     collections,
@@ -39,14 +43,6 @@ export const Admin: React.FC = () => {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
-  const [createEmail, setCreateEmail] = useState("");
-  const [createName, setCreateName] = useState("");
-  const [createUsername, setCreateUsername] = useState("");
-  const [createPassword, setCreatePassword] = useState("");
-  const [createOidcOnly, setCreateOidcOnly] = useState(false);
-  const [createRole, setCreateRole] = useState<"ADMIN" | "USER">("USER");
-  const [createMustReset, setCreateMustReset] = useState(true);
-  const [createActive, setCreateActive] = useState(true);
   const [impersonateTarget, setImpersonateTarget] = useState<AdminUser | null>(
     null,
   );
@@ -58,6 +54,7 @@ export const Admin: React.FC = () => {
     tempPassword: string;
   } | null>(null);
   const accessControl = useAccessControlSettings(isAdmin, setError, setSuccess);
+  const loadAccessControl = accessControl.load;
   const loginRateLimit = useLoginRateLimitSettings({
     authEnabled,
     isAdmin,
@@ -65,32 +62,23 @@ export const Admin: React.FC = () => {
     setSuccess,
   });
   useEffect(() => {
-    if (authEnabled === false) {
-      navigate("/settings", { replace: true });
-      return;
-    }
     if (authEnabled && !isAdmin) {
       navigate("/", { replace: true });
       return;
     }
   }, [authEnabled, isAdmin, navigate]);
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     setLoadingUsers(true);
     setError("");
     try {
       const response = await api.api.get<{ users: AdminUser[] }>("/auth/users");
       setUsers(response.data.users || []);
     } catch (err: unknown) {
-      let message = "Failed to load users";
-      if (api.isAxiosError(err)) {
-        message =
-          err.response?.data?.message || err.response?.data?.error || message;
-      }
-      setError(message);
+      setError(getApiErrorMessage(err, t("admin.errors.loadUsers")));
     } finally {
       setLoadingUsers(false);
     }
-  };
+  }, [t]);
   const generateTempPassword = async (target: AdminUser) => {
     setResetPasswordLoadingId(target.id);
     setError("");
@@ -104,15 +92,10 @@ export const Admin: React.FC = () => {
         email: response.data.user?.email || target.email,
         tempPassword: response.data.tempPassword,
       });
-      setSuccess(`Temporary password generated for ${target.email}`);
+      setSuccess(t("admin.tempPasswordGenerated", { email: target.email }));
       await loadUsers();
     } catch (err: unknown) {
-      let message = "Failed to reset password";
-      if (api.isAxiosError(err)) {
-        message =
-          err.response?.data?.message || err.response?.data?.error || message;
-      }
-      setError(message);
+      setError(getApiErrorMessage(err, t("auth.mustReset.failed")));
     } finally {
       setResetPasswordLoadingId(null);
     }
@@ -121,30 +104,14 @@ export const Admin: React.FC = () => {
     if (!authEnabled || !isAdmin) return;
     void loadCollections();
     void loadUsers();
-    void accessControl.load();
-  }, [authEnabled, isAdmin]);
-  const handleCreateUser = async (e: React.FormEvent) => {
-    e.preventDefault();
+    void loadAccessControl();
+  }, [authEnabled, isAdmin, loadAccessControl, loadCollections, loadUsers]);
+  const handleCreateUser = async (
+    payload: CreateUserInput,
+  ): Promise<boolean> => {
     setError("");
     setSuccess("");
-    const passwordError = createOidcOnly
-      ? null
-      : validatePassword(createPassword, passwordPolicy);
-    if (passwordError) {
-      setError(passwordError);
-      return;
-    }
     try {
-      const payload = {
-        email: createEmail.trim().toLowerCase(),
-        name: createName.trim(),
-        username: createUsername.trim() ? createUsername.trim() : undefined,
-        password: createOidcOnly ? undefined : createPassword,
-        oidcOnly: createOidcOnly,
-        role: createRole,
-        mustResetPassword: createOidcOnly ? false : createMustReset,
-        isActive: createActive,
-      };
       const response = await api.api.post<{ user: AdminUser }>(
         "/auth/users",
         payload,
@@ -154,23 +121,12 @@ export const Admin: React.FC = () => {
           a.createdAt.localeCompare(b.createdAt),
         ),
       );
-      setSuccess("User created");
-      setCreateEmail("");
-      setCreateName("");
-      setCreateUsername("");
-      setCreatePassword("");
-      setCreateOidcOnly(false);
-      setCreateRole("USER");
-      setCreateMustReset(true);
-      setCreateActive(true);
+      setSuccess(t("admin.userCreated"));
       setCreateOpen(false);
+      return true;
     } catch (err: unknown) {
-      let message = "Failed to create user";
-      if (api.isAxiosError(err)) {
-        message =
-          err.response?.data?.message || err.response?.data?.error || message;
-      }
-      setError(message);
+      setError(getApiErrorMessage(err, t("admin.errors.createUser")));
+      return false;
     }
   };
   const patchUser = async (
@@ -192,26 +148,21 @@ export const Admin: React.FC = () => {
       setUsers((prev) =>
         prev.map((u) => (u.id === id ? response.data.user : u)),
       );
-      setSuccess("User updated");
+      setSuccess(t("admin.userUpdated"));
     } catch (err: unknown) {
-      let message = "Failed to update user";
-      if (api.isAxiosError(err)) {
-        message =
-          err.response?.data?.message || err.response?.data?.error || message;
-      }
-      setError(message);
+      setError(getApiErrorMessage(err, t("admin.errors.updateUser")));
     }
   };
   const startImpersonation = async (target: AdminUser) => {
     setError("");
     setSuccess("");
     if (readImpersonationState()) {
-      setError("Stop the current impersonation before starting a new one.");
+      setError(t("admin.errors.stopCurrentImpersonation"));
       return;
     }
     const originalUser = localStorage.getItem(USER_KEY);
     if (!originalUser) {
-      setError("Missing current session user state.");
+      setError(t("admin.errors.missingSession"));
       return;
     }
     try {
@@ -223,7 +174,7 @@ export const Admin: React.FC = () => {
         impersonator: {
           id: authUser?.id || "unknown",
           email: authUser?.email || "unknown",
-          name: authUser?.name || "Unknown Admin",
+          name: authUser?.name || t("admin.unknownAdmin"),
         },
         target: {
           id: response.data.user.id,
@@ -236,12 +187,7 @@ export const Admin: React.FC = () => {
       localStorage.setItem(USER_KEY, JSON.stringify(response.data.user));
       window.location.href = "/";
     } catch (err: unknown) {
-      let message = "Failed to impersonate user";
-      if (api.isAxiosError(err)) {
-        message =
-          err.response?.data?.message || err.response?.data?.error || message;
-      }
-      setError(message);
+      setError(getApiErrorMessage(err, t("admin.errors.impersonate")));
     }
   };
   if (authEnabled === null) {
@@ -261,91 +207,89 @@ export const Admin: React.FC = () => {
       onEditCollection={handleEditCollection}
       onDeleteCollection={handleDeleteCollection}
     >
-      {" "}
-      <AdminHeader
-        loadingUsers={loadingUsers}
-        onRefreshUsers={loadUsers}
-        onToggleCreateUser={() => setCreateOpen((value) => !value)}
-      />{" "}
-      <AdminStatusMessages success={success} error={error} />{" "}
-      {createOpen && (
-        <CreateUserForm
-          email={createEmail}
-          name={createName}
-          username={createUsername}
-          password={createPassword}
-          oidcOnly={createOidcOnly}
-          oidcEnabled={accessControl.oidcEnabled}
-          role={createRole}
-          mustReset={createMustReset}
-          active={createActive}
-          passwordPolicy={passwordPolicy}
-          onSubmit={handleCreateUser}
-          onCancel={() => setCreateOpen(false)}
-          onEmailChange={setCreateEmail}
-          onNameChange={setCreateName}
-          onUsernameChange={setCreateUsername}
-          onPasswordChange={setCreatePassword}
-          onOidcOnlyChange={setCreateOidcOnly}
-          onRoleChange={setCreateRole}
-          onMustResetChange={setCreateMustReset}
-          onActiveChange={setCreateActive}
-        />
-      )}{" "}
-      <AccessControlCard
-        registrationEnabled={accessControl.registrationEnabled}
-        localRegistrationAllowed={accessControl.localRegistrationAllowed}
-        oidcEnabled={accessControl.oidcEnabled}
-        oidcProviderName={accessControl.oidcProviderName}
-        oidcJitProvisioningEnabled={accessControl.oidcJitProvisioningEnabled}
-        loading={accessControl.loading}
-        onToggleRegistration={accessControl.toggleRegistration}
-        onToggleOidcJitProvisioning={accessControl.toggleOidcJitProvisioning}
-      />{" "}
-      <LoginRateLimitCard
-        loading={loginRateLimit.loading}
-        saving={loginRateLimit.saving}
-        autoSaveQueued={loginRateLimit.autoSaveQueued}
-        dirty={loginRateLimit.dirty}
-        enabled={loginRateLimit.enabled}
-        windowMinutes={loginRateLimit.windowMinutes}
-        maxAttempts={loginRateLimit.maxAttempts}
-        resetIdentifier={loginRateLimit.resetIdentifier}
-        resetLoading={loginRateLimit.resetLoading}
-        userEmails={users.map((user) => user.email)}
-        onToggleEnabled={() =>
-          loginRateLimit.setEnabled(!loginRateLimit.enabled)
-        }
-        onWindowMinutesChange={loginRateLimit.setWindowMinutes}
-        onMaxAttemptsChange={loginRateLimit.setMaxAttempts}
-        onResetIdentifierChange={loginRateLimit.setResetIdentifier}
-        onReset={loginRateLimit.reset}
-      />{" "}
-      <UsersTable
-        users={users}
-        loading={loadingUsers}
-        currentUserId={authUser?.id}
-        resetPasswordLoadingId={resetPasswordLoadingId}
-        onRoleChange={(user, role) => patchUser(user.id, { role })}
-        onToggleActive={(user) =>
-          patchUser(user.id, { isActive: !user.isActive })
-        }
-        onToggleMustReset={(user) =>
-          patchUser(user.id, { mustResetPassword: !user.mustResetPassword })
-        }
-        onImpersonate={setImpersonateTarget}
-        onResetPassword={generateTempPassword}
-      />{" "}
-      <UserActionModals
-        impersonateTarget={impersonateTarget}
-        resetPasswordResult={resetPasswordResult}
-        onConfirmImpersonation={startImpersonation}
-        onCancelImpersonation={() => setImpersonateTarget(null)}
-        onCopyPassword={(result) =>
-          navigator.clipboard?.writeText(result.tempPassword)
-        }
-        onClosePassword={() => setResetPasswordResult(null)}
-      />{" "}
+      <div className="mx-auto w-full max-w-5xl">
+        <AdminHeader
+          loadingUsers={loadingUsers}
+          showUserActions={Boolean(authEnabled)}
+          onRefreshUsers={loadUsers}
+          onToggleCreateUser={() => setCreateOpen((value) => !value)}
+        />{" "}
+        <AdminStatusMessages success={success} error={error} />{" "}
+        {authEnabled && createOpen && (
+          <CreateUserForm
+            oidcEnabled={accessControl.oidcEnabled}
+            passwordPolicy={passwordPolicy}
+            onSubmit={handleCreateUser}
+            onCancel={() => setCreateOpen(false)}
+          />
+        )}{" "}
+        {authEnabled ? (
+          <AccessControlCard
+            registrationEnabled={accessControl.registrationEnabled}
+            localRegistrationAllowed={accessControl.localRegistrationAllowed}
+            oidcEnabled={accessControl.oidcEnabled}
+            oidcProviderName={accessControl.oidcProviderName}
+            oidcJitProvisioningEnabled={
+              accessControl.oidcJitProvisioningEnabled
+            }
+            loading={accessControl.loading}
+            onToggleRegistration={accessControl.toggleRegistration}
+            onToggleOidcJitProvisioning={
+              accessControl.toggleOidcJitProvisioning
+            }
+          />
+        ) : null}{" "}
+        {authEnabled && isAdmin ? (
+          <LoginRateLimitCard
+            loading={loginRateLimit.loading}
+            saving={loginRateLimit.saving}
+            autoSaveQueued={loginRateLimit.autoSaveQueued}
+            dirty={loginRateLimit.dirty}
+            enabled={loginRateLimit.enabled}
+            windowMinutes={loginRateLimit.windowMinutes}
+            maxAttempts={loginRateLimit.maxAttempts}
+            resetIdentifier={loginRateLimit.resetIdentifier}
+            resetLoading={loginRateLimit.resetLoading}
+            userEmails={users.map((user) => user.email)}
+            onToggleEnabled={() =>
+              loginRateLimit.setEnabled(!loginRateLimit.enabled)
+            }
+            onWindowMinutesChange={loginRateLimit.setWindowMinutes}
+            onMaxAttemptsChange={loginRateLimit.setMaxAttempts}
+            onResetIdentifierChange={loginRateLimit.setResetIdentifier}
+            onReset={loginRateLimit.reset}
+          />
+        ) : null}{" "}
+        {authEnabled ? (
+          <UsersTable
+            users={users}
+            loading={loadingUsers}
+            currentUserId={authUser?.id}
+            resetPasswordLoadingId={resetPasswordLoadingId}
+            onRoleChange={(user, role) => patchUser(user.id, { role })}
+            onToggleActive={(user) =>
+              patchUser(user.id, { isActive: !user.isActive })
+            }
+            onToggleMustReset={(user) =>
+              patchUser(user.id, { mustResetPassword: !user.mustResetPassword })
+            }
+            onImpersonate={setImpersonateTarget}
+            onResetPassword={generateTempPassword}
+          />
+        ) : null}{" "}
+        {authEnabled ? (
+          <UserActionModals
+            impersonateTarget={impersonateTarget}
+            resetPasswordResult={resetPasswordResult}
+            onConfirmImpersonation={startImpersonation}
+            onCancelImpersonation={() => setImpersonateTarget(null)}
+            onCopyPassword={(result) =>
+              navigator.clipboard?.writeText(result.tempPassword)
+            }
+            onClosePassword={() => setResetPasswordResult(null)}
+          />
+        ) : null}
+      </div>{" "}
       <Toaster position="bottom-center" />{" "}
     </Layout>
   );

@@ -1,5 +1,6 @@
 import express, { Request, Response } from "express";
 import { PrismaClient } from "../generated/client";
+import type { Mailer } from "../mail/mailer";
 import { registerAccountApiKeyRoutes } from "./accountApiKeyRoutes";
 import { registerAccountPasswordChangeRoutes } from "./accountPasswordChangeRoutes";
 import { registerAccountPasswordResetRoutes } from "./accountPasswordResetRoutes";
@@ -14,6 +15,7 @@ export type RegisterAccountRoutesDeps = {
   accountActionRateLimiter: express.RequestHandler;
   ensureAuthEnabled: (res: Response) => Promise<boolean>;
   sanitizeText: (input: unknown, maxLength?: number) => string;
+  mailer?: Mailer;
   config: {
     enablePasswordReset: boolean;
     enableAuditLogging: boolean;
@@ -38,6 +40,7 @@ export type RegisterAccountRoutesDeps = {
   ) => void;
   requireCsrf: (req: Request, res: Response) => boolean;
 };
+
 export const registerAccountRoutes = (deps: RegisterAccountRoutesDeps) => {
   registerAccountPasswordResetRoutes(deps);
   registerAccountPreferencesRoutes(deps);

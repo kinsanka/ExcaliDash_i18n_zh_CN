@@ -59,6 +59,4 @@ export const registerDrawingReadRoutes = (
       });
     }),
   );
-
 };
-

@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { BellOff, ExternalLink, RefreshCw, XCircle } from "lucide-react";
 import * as api from "../api";
+import { PlayfulSelect } from "./PlayfulSelect";
+import { useLocale } from "../context/useLocale";
 
 const CHANNEL_KEY = "excalidash-update-channel";
 const DISMISSED_VERSION_KEY = "excalidash-update-ignored-version";
@@ -19,6 +21,7 @@ const safeGetItem = (key: string): string | null => {
     return null;
   }
 };
+
 const safeSetItem = (key: string, value: string): void => {
   try {
     if (typeof window === "undefined") return;
@@ -61,9 +64,12 @@ const writeChannel = (channel: api.UpdateChannel) => {
   safeSetItem(CHANNEL_KEY, channel);
 };
 
-const lastCheckStorageKey = (channel: api.UpdateChannel) => `${LAST_CHECK_KEY}:${channel}`;
-const updateInfoStorageKey = (channel: api.UpdateChannel) => `${UPDATE_INFO_KEY}:${channel}`;
-const closedVersionStorageKey = (channel: api.UpdateChannel) => `${CLOSED_VERSION_KEY}:${channel}`;
+const lastCheckStorageKey = (channel: api.UpdateChannel) =>
+  `${LAST_CHECK_KEY}:${channel}`;
+const updateInfoStorageKey = (channel: api.UpdateChannel) =>
+  `${UPDATE_INFO_KEY}:${channel}`;
+const closedVersionStorageKey = (channel: api.UpdateChannel) =>
+  `${CLOSED_VERSION_KEY}:${channel}`;
 
 const shouldCheckNow = (channel: api.UpdateChannel): boolean => {
   const raw = safeGetItem(lastCheckStorageKey(channel));
@@ -91,14 +97,19 @@ const writeCachedInfo = (channel: api.UpdateChannel, info: api.UpdateInfo) => {
 };
 
 export const UpdateBanner: React.FC = () => {
-  const [channel, setChannel] = useState<api.UpdateChannel>(() => readChannel());
-  const [info, setInfo] = useState<api.UpdateInfo | null>(() => readCachedInfo(readChannel()));
+  const { t } = useLocale();
+  const [channel, setChannel] = useState<api.UpdateChannel>(() =>
+    readChannel(),
+  );
+  const [info, setInfo] = useState<api.UpdateInfo | null>(() =>
+    readCachedInfo(readChannel()),
+  );
   const [loading, setLoading] = useState(false);
   const [ignoredVersion, setIgnoredVersion] = useState<string | null>(() =>
-    safeGetItem(DISMISSED_VERSION_KEY)
+    safeGetItem(DISMISSED_VERSION_KEY),
   );
   const [closedVersion, setClosedVersion] = useState<string | null>(() =>
-    safeGetSessionItem(closedVersionStorageKey(readChannel()))
+    safeGetSessionItem(closedVersionStorageKey(readChannel())),
   );
 
   const load = async (force: boolean) => {
@@ -145,7 +156,7 @@ export const UpdateBanner: React.FC = () => {
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <div className="flex items-center gap-1.5 text-emerald-800 dark:text-emerald-300 flex-shrink-0">
-            <span className="text-[10px] font-black uppercase tracking-wider">Update available</span>
+            <span className="text-xs font-bold">{t("update.available")}</span>
           </div>
           <div className="min-w-0 flex items-center gap-2">
             <span className="text-sm font-bold text-emerald-950 dark:text-emerald-50 truncate">
@@ -158,30 +169,32 @@ export const UpdateBanner: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2 ml-auto">
-          <select
+          <PlayfulSelect
+            ariaLabel={t("update.channel")}
             value={channel}
-            onChange={(e) => {
-              const next = (e.target.value === "prerelease" ? "prerelease" : "stable") as api.UpdateChannel;
+            onChange={(value) => {
+              const next = (
+                value === "prerelease" ? "prerelease" : "stable"
+              ) as api.UpdateChannel;
               writeChannel(next);
               setChannel(next);
             }}
-            className="h-8 px-2 rounded-lg border border-emerald-200 dark:border-emerald-800/50 bg-white/50 dark:bg-neutral-900/50 text-xs font-bold text-emerald-950 dark:text-emerald-50 outline-none hover:border-emerald-300 dark:hover:border-emerald-700 transition-colors"
-            title="Update channel"
-            aria-label="Update channel"
-          >
-            <option value="stable">stable</option>
-            <option value="prerelease">prerelease</option>
-          </select>
+            size="sm"
+            options={[
+              { value: "stable", label: t("update.channelStable") },
+              { value: "prerelease", label: t("update.channelPrerelease") },
+            ]}
+          />
 
           {info?.latestUrl ? (
             <a
               href={info.latestUrl}
               target="_blank"
               rel="noreferrer"
-              className="h-8 inline-flex items-center justify-center gap-1.5 px-3 rounded-lg bg-emerald-600 dark:bg-emerald-600/80 text-[11px] font-black uppercase tracking-wider text-white hover:bg-emerald-700 dark:hover:bg-emerald-500 transition-all shadow-sm shadow-emerald-900/10"
+              className="ui-button-primary h-8 px-3 text-xs"
             >
               <ExternalLink size={14} strokeWidth={2.5} />
-              <span className="hidden sm:inline">Release</span>
+              <span className="hidden sm:inline">{t("update.release")}</span>
             </a>
           ) : null}
 
@@ -193,11 +206,11 @@ export const UpdateBanner: React.FC = () => {
               safeSetSessionItem(closedVersionStorageKey(channel), latest);
               setClosedVersion(latest);
             }}
-            className="h-8 inline-flex items-center justify-center gap-1.5 px-3 rounded-lg bg-white/70 dark:bg-neutral-900/60 border border-emerald-200 dark:border-emerald-800/50 text-[11px] font-black uppercase tracking-wider text-emerald-900 dark:text-emerald-100 hover:bg-white dark:hover:bg-neutral-900 transition-colors"
-            title="Close (will reappear later)"
+            className="ui-button-secondary h-8 px-3 text-[11px]"
+            title={t("update.closeHint")}
           >
             <XCircle size={14} strokeWidth={2.5} />
-            <span className="hidden sm:inline">Close</span>
+            <span className="hidden sm:inline">{t("common.close")}</span>
           </button>
 
           <button
@@ -208,20 +221,20 @@ export const UpdateBanner: React.FC = () => {
               safeSetItem(DISMISSED_VERSION_KEY, latest);
               setIgnoredVersion(latest);
             }}
-            className="h-8 inline-flex items-center justify-center gap-1.5 px-3 rounded-lg bg-emerald-100/70 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800/50 text-[11px] font-black uppercase tracking-wider text-emerald-900 dark:text-emerald-100 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
-            title="Ignore this version"
+            className="ui-button-secondary h-8 px-3 text-[11px]"
+            title={t("update.ignoreVersion")}
           >
             <BellOff size={14} strokeWidth={2.5} />
-            <span className="hidden sm:inline">Ignore</span>
+            <span className="hidden sm:inline">{t("update.ignore")}</span>
           </button>
 
           <button
             type="button"
             onClick={() => void load(true)}
             disabled={loading}
-            className="h-8 w-8 inline-flex items-center justify-center rounded-lg bg-white/70 dark:bg-neutral-900/60 border border-emerald-200 dark:border-emerald-800/50 text-emerald-900 dark:text-emerald-100 hover:bg-white dark:hover:bg-neutral-900 transition-colors disabled:opacity-50"
-            title="Re-check now"
-            aria-label="Re-check now"
+            className="ui-icon-button h-8 w-8"
+            title={t("update.recheck")}
+            aria-label={t("update.recheck")}
           >
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
           </button>

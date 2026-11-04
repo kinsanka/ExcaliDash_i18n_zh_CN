@@ -1,17 +1,17 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, Shield, ShieldOff } from 'lucide-react';
-import { Logo } from '../components/Logo';
-import { useAuth } from '../context/AuthContext';
-import * as api from '../api';
-import { useI18n } from '../context/I18nContext';
-import { AuthStatusErrorPanel } from '../components/AuthStatusErrorPanel';
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { AlertTriangle, Shield, ShieldOff } from "lucide-react";
+import { Logo } from "../components/Logo";
+import { useAuth } from "../context/AuthContext";
+import * as api from "../api";
+import { AuthStatusErrorPanel } from "../components/AuthStatusErrorPanel";
+import { useLocale } from "../context/useLocale";
 
-type Step = 'choice' | 'confirm-disable';
+type Step = "choice" | "confirm-disable";
 
 export const AuthSetupChoice: React.FC = () => {
-  const { t } = useI18n();
   const navigate = useNavigate();
+  const { t } = useLocale();
   const {
     loading: authLoading,
     authEnabled,
@@ -23,9 +23,9 @@ export const AuthSetupChoice: React.FC = () => {
     authOnboardingMode,
   } = useAuth();
 
-  const [step, setStep] = useState<Step>('choice');
+  const [step, setStep] = useState<Step>("choice");
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (authStatusError) return;
@@ -33,21 +33,21 @@ export const AuthSetupChoice: React.FC = () => {
     if (authOnboardingRequired) return;
 
     if (!authEnabled) {
-      navigate('/', { replace: true });
+      navigate("/", { replace: true });
       return;
     }
 
     if (bootstrapRequired) {
-      navigate('/register', { replace: true });
+      navigate("/register", { replace: true });
       return;
     }
 
     if (isAuthenticated) {
-      navigate('/', { replace: true });
+      navigate("/", { replace: true });
       return;
     }
 
-    navigate('/login', { replace: true });
+    navigate("/login", { replace: true });
   }, [
     authEnabled,
     authLoading,
@@ -58,25 +58,31 @@ export const AuthSetupChoice: React.FC = () => {
     navigate,
   ]);
 
-  const isMigrationMode = authOnboardingMode === 'migration';
+  const isMigrationMode = authOnboardingMode === "migration";
 
   const applyChoice = async (enableAuth: boolean) => {
     setSubmitting(true);
-    setError('');
+    setError("");
     try {
       const response = await api.authOnboardingChoice(enableAuth);
-      localStorage.setItem('excalidash-auth-enabled', String(response.authEnabled));
+      localStorage.setItem(
+        "excalidash-auth-enabled",
+        String(response.authEnabled),
+      );
 
       if (response.authEnabled) {
-        window.location.href = response.bootstrapRequired ? '/register' : '/login';
+        window.location.href = response.bootstrapRequired
+          ? "/register"
+          : "/login";
         return;
       }
 
-      window.location.href = '/';
+      window.location.href = "/";
     } catch (err: unknown) {
-      let message = t("auth.applyChoiceFailed");
+      let message = t("authSetup.failed");
       if (api.isAxiosError(err)) {
-        message = err.response?.data?.message || err.response?.data?.error || message;
+        message =
+          err.response?.data?.message || err.response?.data?.error || message;
       }
       setError(message);
       setSubmitting(false);
@@ -85,11 +91,19 @@ export const AuthSetupChoice: React.FC = () => {
 
   if (authLoading || authEnabled === null || !authOnboardingRequired) {
     if (authStatusError) {
-      return <AuthStatusErrorPanel message={authStatusError} onRetry={retryAuthStatus} fullScreen />;
+      return (
+        <AuthStatusErrorPanel
+          message={authStatusError}
+          onRetry={retryAuthStatus}
+          fullScreen
+        />
+      );
     }
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
-        <div className="text-gray-600 dark:text-gray-400">{t("common.loading")}</div>
+        <div className="text-gray-600 dark:text-gray-400">
+          {t("common.loading")}
+        </div>
       </div>
     );
   }
@@ -100,40 +114,34 @@ export const AuthSetupChoice: React.FC = () => {
         <div className="text-center mb-8">
           <Logo className="mx-auto h-12 w-auto" />
           <h1 className="mt-6 text-2xl sm:text-3xl font-extrabold text-gray-900 dark:text-white leading-tight">
-            {step === 'choice' ? t("auth.chooseMode") : t("auth.keepDisabled")}
+            {step === "choice"
+              ? t("authSetup.chooseTitle")
+              : t("authSetup.confirmDisableTitle")}
           </h1>
-          <p className="mt-4 text-sm sm:text-base text-gray-600 dark:text-gray-300">
-            {step === 'choice'
+          <p className="mt-3 text-sm text-slate-600 dark:text-neutral-300">
+            {step === "choice"
               ? isMigrationMode
-                ? t("auth.migrationDetected")
-                : t("auth.newSetupDetected")
-              : t("auth.privateNetworkOnly")}
+                ? t("authSetup.existingData")
+                : t("authSetup.secureWorkspace")
+              : t("authSetup.trustedNetworkOnly")}
           </p>
         </div>
 
-        <div className="rounded-2xl border-2 border-black dark:border-neutral-700 bg-white dark:bg-neutral-900 p-6 sm:p-8 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[3px_3px_0px_0px_rgba(255,255,255,0.15)]">
+        <div className="rounded-2xl border-2 border-slate-800 dark:border-neutral-700 bg-white dark:bg-neutral-900 p-6 sm:p-8 shadow-[3px_3px_0px_0px_rgba(30,41,59,0.9)] dark:shadow-[3px_3px_0px_0px_rgba(255,255,255,0.18)]">
           {error && (
-            <div className="mb-5 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-900/20 p-3 text-sm text-red-800 dark:text-red-200">
+            <div className="mb-5 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950 p-3 text-sm text-red-800 dark:text-red-200">
               {error}
             </div>
           )}
 
-          {step === 'choice' ? (
+          {step === "choice" ? (
             <>
-              <div className="mb-6 rounded-lg border border-slate-200 dark:border-neutral-700 bg-slate-50 dark:bg-neutral-800 p-4 text-sm text-slate-700 dark:text-neutral-200">
-                <div className="font-semibold mb-1">{t("auth.enableNow")}</div>
-                <div>{t("auth.enableNowDesc")}</div>
-              </div>
-
-              <div className="mb-6 rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-900/20 p-4 text-sm text-emerald-800 dark:text-emerald-200">
-                {t("auth.recommendEnable")}
-              </div>
-
-              {isMigrationMode && (
-                <div className="mb-6 rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-900/20 p-4 text-sm text-blue-800 dark:text-blue-200">
-                  {t("auth.migrationExplain")}
+              <div className="mb-6 rounded-lg border border-indigo-200 dark:border-neutral-700 bg-indigo-50 dark:bg-neutral-800 p-4 text-sm text-slate-700 dark:text-neutral-200">
+                <div className="font-semibold text-indigo-900 dark:text-indigo-200 mb-1">
+                  {t("authSetup.secureTitle")}
                 </div>
-              )}
+                <div>{t("authSetup.secureDescription")}</div>
+              </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <button
@@ -142,31 +150,29 @@ export const AuthSetupChoice: React.FC = () => {
                   onClick={() => {
                     void applyChoice(true);
                   }}
-                  className="flex items-center justify-center gap-2 rounded-xl border-2 border-black bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 transition-all disabled:opacity-60"
+                  className="ui-button-primary px-4 py-3"
                 >
                   <Shield size={18} />
-                  {t("auth.enableAuthentication")}
+                  {t("authSetup.enable")}
                 </button>
 
                 <button
                   type="button"
                   disabled={submitting}
-                  onClick={() => setStep('confirm-disable')}
-                  className="flex items-center justify-center gap-2 rounded-xl border-2 border-black bg-white dark:bg-neutral-800 px-4 py-3 text-sm font-bold text-gray-900 dark:text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 transition-all disabled:opacity-60"
+                  onClick={() => setStep("confirm-disable")}
+                  className="ui-button-secondary px-4 py-3"
                 >
                   <ShieldOff size={18} />
-                  {t("auth.keepAuthenticationDisabled")}
+                  {t("authSetup.keepDisabled")}
                 </button>
               </div>
             </>
           ) : (
             <>
-              <div className="mb-6 rounded-lg border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-900/20 p-4 text-sm text-rose-800 dark:text-rose-200">
+              <div className="mb-6 rounded-lg border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950 p-4 text-sm text-rose-900 dark:text-rose-200">
                 <div className="flex items-start gap-2">
-                  <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
-                  <div>
-                    {t("auth.disableWarning")}
-                  </div>
+                  <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-rose-600 dark:text-rose-400" />
+                  <div>{t("authSetup.disableWarning")}</div>
                 </div>
               </div>
 
@@ -174,10 +180,10 @@ export const AuthSetupChoice: React.FC = () => {
                 <button
                   type="button"
                   disabled={submitting}
-                  onClick={() => setStep('choice')}
-                  className="rounded-xl border-2 border-black bg-white dark:bg-neutral-800 px-4 py-3 text-sm font-bold text-gray-900 dark:text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 transition-all disabled:opacity-60"
+                  onClick={() => setStep("choice")}
+                  className="ui-button-secondary px-4 py-3"
                 >
-                  {t("auth.goBack")}
+                  {t("common.goBack")}
                 </button>
 
                 <button
@@ -186,9 +192,9 @@ export const AuthSetupChoice: React.FC = () => {
                   onClick={() => {
                     void applyChoice(false);
                   }}
-                  className="rounded-xl border-2 border-black bg-rose-600 px-4 py-3 text-sm font-bold text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 transition-all disabled:opacity-60"
+                  className="ui-button-danger px-4 py-3"
                 >
-                  {t("auth.confirmDisableAuthentication")}
+                  {t("authSetup.disable")}
                 </button>
               </div>
             </>

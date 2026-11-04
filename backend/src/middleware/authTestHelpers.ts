@@ -68,4 +68,3 @@ export const makeRefreshToken = () =>
     { userId: "user-1", email: "user-1@test.local", type: "refresh" },
     config.jwtSecret,
   );
-

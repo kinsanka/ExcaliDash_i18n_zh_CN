@@ -395,4 +395,3 @@ export const registerDrawingSharingRoutes = (
 
   // Legacy share-token exchange endpoint removed: link access is based on drawing id + active policy.
 };
-

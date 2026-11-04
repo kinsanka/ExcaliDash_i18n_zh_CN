@@ -34,11 +34,11 @@ const textReplacements = new Map<string, string>([
   ["Excalidraw links", "Excalidraw 链接"],
   ["Follow us", "关注我们"],
   ["Discord chat", "Discord 聊天"],
-    ["Toggle grid", "切换网格"],
-    ["Canvas & Shape properties", "画布和图形属性"],
-    ["Canvas", "画布"],
-    ["Grid step", "网格步长"],
-    ["General", "常规"],
+  ["Toggle grid", "切换网格"],
+  ["Canvas & Shape properties", "画布和图形属性"],
+  ["Canvas", "画布"],
+  ["Grid step", "网格步长"],
+  ["General", "常规"],
   ["Shape properties", "图形属性"],
   ["Shapes", "图形"],
   ["Mixed", "混合"],
@@ -64,11 +64,23 @@ const textReplacements = new Map<string, string>([
   ["Navigate a flowchart", "导航流程图"],
   ["Type or paste your link here", "在这里输入或粘贴链接"],
   ["Empty Web-Embed", "空网页嵌入"],
-  ["Click on a shape on canvas or paste a link.", "点击画布上的图形，或粘贴一个链接。"],
-  ["Press Enter to add text. Hold Ctrl and Arrow key to create a flowchart", "按下 Enter 添加文本。按住 Ctrl 和方向键可创建流程图"],
+  [
+    "Click on a shape on canvas or paste a link.",
+    "点击画布上的图形，或粘贴一个链接。",
+  ],
+  [
+    "Press Enter to add text. Hold Ctrl and Arrow key to create a flowchart",
+    "按下 Enter 添加文本。按住 Ctrl 和方向键可创建流程图",
+  ],
   ["Failed to save changes", "保存更改失败"],
-  ["Click to start multiple points, drag for single line. Press A again to change arrow type.", "单击开始绘制多个点，拖动可绘制单条线段。再次按 A 可切换箭头类型。"],
-  ["Click to start multiple points, drag for single arrow. Press A again to change arrow type.", "单击开始绘制多个点，拖动可绘制单个箭头。再次按 A 可切换箭头类型。"],
+  [
+    "Click to start multiple points, drag for single line. Press A again to change arrow type.",
+    "单击开始绘制多个点，拖动可绘制单条线段。再次按 A 可切换箭头类型。",
+  ],
+  [
+    "Click to start multiple points, drag for single arrow. Press A again to change arrow type.",
+    "单击开始绘制多个点，拖动可绘制单个箭头。再次按 A 可切换箭头类型。",
+  ],
   ["None", "无"],
   ["Arrow", "箭头"],
   ["Bar", "横杠"],
@@ -101,7 +113,10 @@ const textReplacements = new Map<string, string>([
 ]);
 
 const normalizeText = (value: string) =>
-  value.replace(/\s+/g, " ").replace(/\u2026/g, "...").trim();
+  value
+    .replace(/\s+/g, " ")
+    .replace(/\u2026/g, "...")
+    .trim();
 
 const getReplacement = (value: string) => {
   const normalizedValue = normalizeText(value);
@@ -113,7 +128,8 @@ const getReplacement = (value: string) => {
   return null;
 };
 
-const escapeForRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escapeForRegex = (value: string) =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const replaceKnownSubstrings = (value: string) => {
   let nextValue = value;
