@@ -11,7 +11,7 @@ test("Chinese settings persist and Chinese canvas text survives a reload", async
   });
   const failedFonts: string[] = [];
   page.on("response", (response) => {
-    if (response.url().includes(".woff2") && !response.ok())
+    if (response.url().includes(".woff2") && response.status() >= 400)
       failedFonts.push(response.url());
   });
   try {
