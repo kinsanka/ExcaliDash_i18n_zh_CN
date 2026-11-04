@@ -1,10 +1,5 @@
 import { expect, test } from "@playwright/test";
-import {
-  API_URL,
-  createDrawing,
-  deleteDrawing,
-  getDrawing,
-} from "./helpers/api";
+import { createDrawing, deleteDrawing, getDrawing } from "./helpers/api";
 
 test("Chinese settings persist and Chinese canvas text survives a reload", async ({
   page,
@@ -30,10 +25,12 @@ test("Chinese settings persist and Chinese canvas text survives a reload", async
       page.getByText("上游正式版进度", { exact: true }),
     ).toBeVisible();
     await expect
-      .poll(
-        async () =>
-          (await (await page.request.get(`${API_URL}/auth/preferences`)).json())
-            .preferences.language,
+      .poll(() =>
+        page.evaluate(
+          () =>
+            JSON.parse(localStorage.getItem("excalidash-preferences") ?? "{}")
+              .language,
+        ),
       )
       .toBe("zh-CN");
     await page.reload();
@@ -86,10 +83,12 @@ test("Chinese settings persist and Chinese canvas text survives a reload", async
       .getByRole("combobox", { name: /^(Language|语言)$/ })
       .selectOption("en");
     await expect
-      .poll(
-        async () =>
-          (await (await page.request.get(`${API_URL}/auth/preferences`)).json())
-            .preferences.language,
+      .poll(() =>
+        page.evaluate(
+          () =>
+            JSON.parse(localStorage.getItem("excalidash-preferences") ?? "{}")
+              .language,
+        ),
       )
       .toBe("en");
     await deleteDrawing(request, drawing.id);
