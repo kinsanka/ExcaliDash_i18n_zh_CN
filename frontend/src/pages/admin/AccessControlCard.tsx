@@ -1,6 +1,13 @@
-import React from 'react';
-import { UserPlus } from 'lucide-react';
-import { useI18n } from '../../context/I18nContext';
+import React from "react";
+import { UserPlus } from "lucide-react";
+import { PlayfulSwitch } from "../../components/PlayfulSwitch";
+import {
+  SettingsCard,
+  SettingsRow,
+  SettingsSectionHeader,
+} from "../settings/SettingsRow";
+import { useLocale } from "../../context/useLocale";
+import type { TranslationKey } from "../../i18n";
 
 type AccessControlCardProps = {
   registrationEnabled: boolean | null;
@@ -13,46 +20,15 @@ type AccessControlCardProps = {
   onToggleOidcJitProvisioning: () => void | Promise<void>;
 };
 
-const getRegistrationSummary = (
+const getRegistrationDescriptionKey = (
   registrationEnabled: boolean | null,
   localRegistrationAllowed: boolean,
-  t: (key: string) => string,
-) => {
-  if (registrationEnabled === null) return t('common.loading');
-  if (!localRegistrationAllowed) return t('admin.localRegistrationManagedByOidc');
+): TranslationKey => {
+  if (registrationEnabled === null) return "admin.access.loading";
+  if (!localRegistrationAllowed) return "admin.access.oidcOnly";
   return registrationEnabled
-    ? t('admin.localRegistrationEnabledDesc')
-    : t('admin.localRegistrationDisabledDesc');
-};
-
-const getRegistrationLabel = (
-  registrationEnabled: boolean | null,
-  localRegistrationAllowed: boolean,
-  loading: boolean,
-  t: (key: string) => string,
-) => {
-  if (registrationEnabled === null) return t('common.loading');
-  if (!localRegistrationAllowed) return t('admin.managedByOidc');
-  if (loading) return t('admin.saving');
-  return registrationEnabled ? t('admin.enabled') : t('admin.disabled');
-};
-
-const getRegistrationButtonClassName = (
-  registrationEnabled: boolean | null,
-  localRegistrationAllowed: boolean
-) =>
-  `w-full px-4 py-3 rounded-xl border-2 font-bold transition-all text-sm ${
-    !localRegistrationAllowed
-      ? 'border-slate-200 dark:border-neutral-700 bg-slate-100 dark:bg-neutral-800 text-slate-500 dark:text-neutral-400'
-      : registrationEnabled
-        ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300'
-        : 'border-slate-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-slate-600 dark:text-neutral-300'
-  }`;
-
-const getOidcLabel = (enabled: boolean | null, loading: boolean, t: (key: string) => string) => {
-  if (enabled === null) return t('common.loading');
-  if (loading) return t('admin.saving');
-  return enabled ? t('admin.enabled') : t('admin.inviteOnly');
+    ? "admin.access.signupOpen"
+    : "admin.access.signupBlocked";
 };
 
 export const AccessControlCard: React.FC<AccessControlCardProps> = ({
@@ -65,76 +41,60 @@ export const AccessControlCard: React.FC<AccessControlCardProps> = ({
   onToggleRegistration,
   onToggleOidcJitProvisioning,
 }) => {
-  const { t } = useI18n();
-  const providerName = oidcProviderName || 'OIDC';
-
+  const { t } = useLocale();
   return (
-    <div className="mb-6 bg-white dark:bg-neutral-900 border-2 border-black dark:border-neutral-700 rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.2)] p-4 sm:p-6">
-      <div className="flex items-center gap-3 mb-4">
-        <div className="w-12 h-12 bg-emerald-50 dark:bg-neutral-800 rounded-xl flex items-center justify-center border-2 border-emerald-100 dark:border-neutral-700">
-          <UserPlus size={24} className="text-emerald-700 dark:text-emerald-300" />
-        </div>
-        <div className="min-w-0">
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">{t('admin.accessControl')}</h2>
-          <p className="text-sm text-slate-600 dark:text-neutral-400 font-medium">
-            {getRegistrationSummary(registrationEnabled, localRegistrationAllowed, t)}
-          </p>
-        </div>
-      </div>
+    <section className="mb-6">
+      <SettingsSectionHeader
+        icon={<UserPlus size={20} />}
+        tileClassName="border-black bg-emerald-400 text-black dark:border-neutral-700 dark:bg-emerald-400 dark:text-black"
+        title={t("admin.access.title")}
+        subtitle={t("admin.access.subtitle")}
+      />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div>
-          <label className="block text-sm font-bold text-slate-700 dark:text-neutral-300 mb-2">
-            {t('admin.localSelfSignup')}
-          </label>
-          <button
-            type="button"
-            onClick={() => void onToggleRegistration()}
-            disabled={loading || registrationEnabled === null || !localRegistrationAllowed}
-            className={getRegistrationButtonClassName(
+      <SettingsCard>
+        <SettingsRow
+          title={t("admin.access.localSignup")}
+          description={t(
+            getRegistrationDescriptionKey(
               registrationEnabled,
-              localRegistrationAllowed
-            )}
-          >
-            {getRegistrationLabel(registrationEnabled, localRegistrationAllowed, loading, t)}
-          </button>
-        </div>
-        {oidcEnabled && (
-          <div>
-            <label className="block text-sm font-bold text-slate-700 dark:text-neutral-300 mb-2">
-              {t('admin.oidcAutoProvisioning', { provider: providerName })}
-            </label>
-            <button
-              type="button"
-              onClick={() => void onToggleOidcJitProvisioning()}
-              disabled={loading || oidcJitProvisioningEnabled === null}
-              className={`w-full px-4 py-3 rounded-xl border-2 font-bold transition-all text-sm ${
-                oidcJitProvisioningEnabled
-                  ? 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200'
-                  : 'border-slate-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-slate-600 dark:text-neutral-300'
-              }`}
-            >
-              {getOidcLabel(oidcJitProvisioningEnabled, loading, t)}
-            </button>
-          </div>
-        )}
-      </div>
+              localRegistrationAllowed,
+            ),
+          )}
+        >
+          <PlayfulSwitch
+            checked={Boolean(registrationEnabled)}
+            disabled={
+              loading ||
+              registrationEnabled === null ||
+              !localRegistrationAllowed
+            }
+            onChange={() => void onToggleRegistration()}
+            ariaLabel={t("admin.access.toggleLocalSignup")}
+          />
+        </SettingsRow>
 
-      {oidcEnabled && oidcJitProvisioningEnabled !== null && (
-        <div className="mt-4 rounded-xl border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-900/20 p-4 text-sm text-blue-900 dark:text-blue-100">
-          <div className="font-semibold">
-            {t('admin.oidcAccessSummary', {
-              provider: providerName,
-              mode: oidcJitProvisioningEnabled ? t('admin.autoProvisioningEnabled') : t('admin.inviteOnly'),
+        {oidcEnabled ? (
+          <SettingsRow
+            title={t("admin.access.autoProvisioning", {
+              provider: oidcProviderName || "OIDC",
             })}
-          </div>
-          <div className="mt-1">
-            {oidcJitProvisioningEnabled
-              ? t('admin.oidcAutoProvisioningDesc', { provider: providerName })
-              : t('admin.oidcInviteOnlyDesc', { provider: providerName })}
-          </div>
-        </div>
-      )}
-    </div>
+            description={
+              oidcJitProvisioningEnabled
+                ? t("admin.access.autoProvisioningOn")
+                : t("admin.access.autoProvisioningOff")
+            }
+          >
+            <PlayfulSwitch
+              checked={Boolean(oidcJitProvisioningEnabled)}
+              disabled={loading || oidcJitProvisioningEnabled === null}
+              onChange={() => void onToggleOidcJitProvisioning()}
+              ariaLabel={t("admin.access.toggleAutoProvisioning", {
+                provider: oidcProviderName || "OIDC",
+              })}
+            />
+          </SettingsRow>
+        ) : null}
+      </SettingsCard>
+    </section>
   );
 };

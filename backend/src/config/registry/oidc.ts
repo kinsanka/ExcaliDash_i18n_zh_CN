@@ -45,6 +45,12 @@ export const oidcEnv: readonly EnvVarSpec[] = [
     doc: "Display name of the OIDC provider shown in the UI.",
   },
   {
+    name: "OIDC_CLIENT_SECRET_FILE",
+    group: "OIDC",
+    kind: "string",
+    doc: "Readable file containing the OIDC client secret; mutually exclusive with OIDC_CLIENT_SECRET.",
+  },
+  {
     name: "OIDC_SCOPES",
     group: "OIDC",
     kind: "string",
@@ -128,4 +134,3 @@ export const oidcEnv: readonly EnvVarSpec[] = [
     doc: "Client authentication method used at the token endpoint.",
   },
 ];
-

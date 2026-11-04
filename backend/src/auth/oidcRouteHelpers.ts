@@ -275,4 +275,3 @@ export const getOidcErrorMessage = (errorCode: string): string => {
       return "OIDC sign-in failed.";
   }
 };
-

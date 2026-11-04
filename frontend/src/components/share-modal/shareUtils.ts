@@ -1,11 +1,13 @@
-export const EXPIRY_OPTIONS = [
-  { label: "Disable in 1 hour", value: "1h" },
-  { label: "Disable in 1 day", value: "1d" },
-  { label: "Disable in 2 days", value: "2d" },
-  { label: "Disable in 7 days", value: "7d" },
-  { label: "Disable in 30 days", value: "30d" },
-  { label: "Never auto-disable", value: "never" },
-  { label: "Disable at...", value: "custom" },
+import type { TranslationKey } from "../../i18n";
+
+export const EXPIRY_OPTIONS: { labelKey: TranslationKey; value: string }[] = [
+  { labelKey: "editor.share.expiry.1h", value: "1h" },
+  { labelKey: "editor.share.expiry.1d", value: "1d" },
+  { labelKey: "editor.share.expiry.2d", value: "2d" },
+  { labelKey: "editor.share.expiry.7d", value: "7d" },
+  { labelKey: "editor.share.expiry.30d", value: "30d" },
+  { labelKey: "editor.share.expiry.never", value: "never" },
+  { labelKey: "editor.share.expiry.custom", value: "custom" },
 ];
 
 export const EXPIRY_OPTIONS_FOR_EDIT = EXPIRY_OPTIONS.filter(
@@ -14,7 +16,7 @@ export const EXPIRY_OPTIONS_FOR_EDIT = EXPIRY_OPTIONS.filter(
 
 export const DEFAULT_EDIT_EXPIRY_OPTION = "7d";
 
-const toIsoFromDatetimeLocal = (value: string): string | undefined => {
+export const toIsoFromDatetimeLocal = (value: string): string | undefined => {
   const trimmed = (value || "").trim();
   if (!trimmed) return undefined;
   const date = new Date(trimmed);
@@ -62,9 +64,12 @@ export const calculateExpiresAt = (
 };
 
 export const formatAutoDisableText = (expiresAt: string | null): string => {
-  if (!expiresAt) return "External access does not auto-disable.";
+  if (!expiresAt) return "Link does not expire";
   const ts = Date.parse(String(expiresAt));
-  if (!Number.isFinite(ts)) return "External access will auto-disable.";
-  return `External access auto-disables on ${new Date(ts).toLocaleString()}.`;
+  if (!Number.isFinite(ts)) return "Link will expire";
+  const formatted = new Date(ts).toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+  return `Expires on ${formatted}`;
 };
-

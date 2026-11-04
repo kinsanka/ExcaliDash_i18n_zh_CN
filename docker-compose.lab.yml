@@ -2,8 +2,8 @@ name: excalidash-lab
 
 x-backend-build: &backend-build
   build:
-    context: ./backend
-    dockerfile: Dockerfile
+    context: .
+    dockerfile: backend/Dockerfile
 
 x-frontend-build: &frontend-build
   build:
@@ -41,7 +41,15 @@ x-frontend-common: &frontend-common
   <<: *frontend-build
   restart: unless-stopped
   healthcheck:
-    test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:80"]
+    test:
+      [
+        "CMD",
+        "wget",
+        "--quiet",
+        "--tries=1",
+        "--spider",
+        "http://127.0.0.1:8080",
+      ]
     interval: 10s
     timeout: 5s
     retries: 12
@@ -123,7 +131,7 @@ services:
   frontend-basic:
     <<: *frontend-common
     ports:
-      - "1101:80"
+      - "1101:8080"
     environment:
       BACKEND_URL: backend-basic:8000
     depends_on:
@@ -157,7 +165,7 @@ services:
   frontend-basic-seaweed:
     <<: *frontend-common
     ports:
-      - "1102:80"
+      - "1102:8080"
     environment:
       BACKEND_URL: backend-basic-seaweed:8000
     depends_on:
@@ -192,7 +200,7 @@ services:
   frontend-oidc:
     <<: *frontend-common
     ports:
-      - "1103:80"
+      - "1103:8080"
     environment:
       BACKEND_URL: backend-oidc:8000
     depends_on:
@@ -227,7 +235,7 @@ services:
   frontend-hybrid:
     <<: *frontend-common
     ports:
-      - "1104:80"
+      - "1104:8080"
     environment:
       BACKEND_URL: backend-hybrid:8000
     depends_on:
@@ -251,7 +259,7 @@ services:
   frontend-trusted-proxy:
     <<: *frontend-common
     ports:
-      - "1105:80"
+      - "1105:8080"
     environment:
       BACKEND_URL: backend-trusted-proxy:8000
     depends_on:
@@ -287,4 +295,3 @@ volumes:
   lab-backend-trusted-proxy-data:
   lab-backend-trusted-proxy-backups:
   lab-seaweedfs-data:
-

@@ -1,42 +1,80 @@
-name: Tests
+name: CI
 
 on:
   push:
-    branches: [main, beta]
+    branches: [main, dev]
   pull_request:
-    branches: [main]
+    branches: [main, dev]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # Publishing runs must finish promoting both images; superseded PR checks can stop.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  DOCKERHUB_USERNAME: kinsanka
 
 jobs:
-  backend-tests:
-    name: Backend Tests
-    runs-on: ubuntu-latest
-    
+  changes:
+    name: Detect application changes
+    runs-on: ubuntu-24.04
+    outputs:
+      application: ${{ steps.paths.outputs.application }}
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: backend/package-lock.json
-      
-      - name: Install backend dependencies
+          fetch-depth: 0
+      - name: Separate docs changes from application changes
+        id: paths
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          cd backend
-          npm ci
-      
+          application=true
+          if [ "$EVENT_NAME" != workflow_dispatch ] && git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            application=false
+            while IFS= read -r -d '' path; do
+              case "$path" in
+                docs/*|README.md|vercel.json|.github/workflows/test.yml) ;;
+                *) application=true; break ;;
+              esac
+            done < <(git diff --name-only -z "$BASE_SHA" "$HEAD_SHA")
+          fi
+          echo "application=$application" >> "$GITHUB_OUTPUT"
+
+  backend-tests:
+    name: Backend Integration Tests
+    needs: changes
+    if: needs.changes.outputs.application == 'true'
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24.22.1"
+          cache: "npm"
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Install test dependencies
+        run: |
+          npm --prefix backend ci
+          npm --prefix frontend ci
+
       - name: Generate Prisma client
         run: |
           cd backend
           npx prisma generate
-      
+
       - name: Run backend tests
         run: |
           cd backend
@@ -44,186 +82,95 @@ jobs:
 
   repo-checks:
     name: Repo Checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: backend/package-lock.json
+          node-version: "24.22.1"
+          cache: "npm"
+          cache-dependency-path: |
+            package-lock.json
+            backend/package-lock.json
+            frontend/package-lock.json
 
-      - name: Install backend dependencies
+      - name: Install check dependencies
         run: |
-          cd backend
           npm ci
+          npm --prefix backend ci
+          npm --prefix frontend ci
 
-      - name: Check max source line count
-        run: |
-          cd backend
-          npm run check:max-lines
+      - name: Check formatting and lint
+        run: npm run check
 
-      - name: Check env boundary
+      - name: Run frontend unit and lab configuration tests
         run: |
-          cd backend
-          npm run check:env-boundary
+          npm --prefix frontend run test:unit
+          node --test scripts/lab-frontend-ports.test.mjs
 
-  frontend-unit-tests:
-    name: Frontend Unit Tests
-    runs-on: ubuntu-latest
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-      
-      - name: Install frontend dependencies
-        run: |
-          cd frontend
-          npm ci
-      
-      - name: Run frontend tests
-        run: |
-          cd frontend
-          npm test
+      - name: Build frontend
+        run: npm --prefix frontend run build
+
+      - name: Build documentation
+        run: npm run docs:build
 
   e2e-tests:
-    name: E2E Browser Tests
-    runs-on: ubuntu-latest
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      
-      - name: Install backend dependencies
-        run: |
-          cd backend
-          npm ci
-      
-      - name: Generate Prisma client
-        run: |
-          cd backend
-          npx prisma generate
-      
-      - name: Setup backend database
-        run: |
-          cd backend
-          node scripts/provider-prisma.cjs migrate deploy
-        env:
-          DATABASE_URL: file:${{ github.workspace }}/backend/prisma/e2e-test.db
-      
-      - name: Install frontend dependencies
-        run: |
-          cd frontend
-          npm ci
-      
-      - name: Install E2E test dependencies
-        run: |
-          cd e2e
-          npm ci
-      
-      - name: Install Playwright browsers
-        run: |
-          cd e2e
-          npx playwright install chromium --with-deps
-      
-      - name: Start servers and run E2E tests
-        run: |
-          # Start backend server in background
-          cd backend
-          DATABASE_URL="file:${{ github.workspace }}/backend/prisma/e2e-test.db" FRONTEND_URL="http://localhost:6767" CSRF_MAX_REQUESTS="100000" RATE_LIMIT_MAX_REQUESTS="100000" CSRF_SECRET="e2e-csrf-secret" npm run dev &
-          BACKEND_PID=$!
-          cd ..
-          
-          # Wait for backend to be ready
-          echo "Waiting for backend server..."
-          for i in {1..30}; do
-            if curl -s http://localhost:8000/health > /dev/null; then
-              echo "Backend is ready!"
-              break
-            fi
-            echo "Attempt $i: Backend not ready yet..."
-            sleep 2
-          done
-          
-          # Start frontend server in background
-          cd frontend
-          npm run dev -- --host &
-          FRONTEND_PID=$!
-          cd ..
-          
-          # Wait for frontend to be ready
-          echo "Waiting for frontend server..."
-          for i in {1..30}; do
-            if curl -s http://localhost:6767 > /dev/null; then
-              echo "Frontend is ready!"
-              break
-            fi
-            echo "Attempt $i: Frontend not ready yet..."
-            sleep 2
-          done
-          
-          # Run E2E tests
-          cd e2e
-          NO_SERVER=true CI=true npx playwright test
-          TEST_EXIT_CODE=$?
-          
-          # Cleanup
-          kill $BACKEND_PID $FRONTEND_PID 2>/dev/null || true
-          
-          exit $TEST_EXIT_CODE
-        env:
-          DATABASE_URL: file:${{ github.workspace }}/backend/prisma/e2e-test.db
-      
-      - name: Upload Playwright report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: playwright-report
-          path: e2e/playwright-report/
-          retention-days: 7
-      
-      - name: Upload test results
-        uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: test-results
-          path: e2e/test-results/
-          retention-days: 7
+    name: E2E (${{ matrix.mode }})
+    needs: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [anonymous, authenticated]
 
-  # Security tests for data sanitization
-  security-tests:
-    name: Security Sanitization Tests
-    runs-on: ubuntu-latest
-    
     steps:
-      - uses: actions/checkout@v4
-      
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        if: needs.changes.outputs.application == 'true'
+
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        if: needs.changes.outputs.application == 'true'
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: backend/package-lock.json
-      
-      - name: Install backend dependencies
+          node-version: "24.22.1"
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+            e2e/package-lock.json
+
+      - name: Install dependencies and generate Prisma client
+        if: needs.changes.outputs.application == 'true'
         run: |
-          cd backend
-          npm ci
-      
-      - name: Generate Prisma client
-        run: |
-          cd backend
-          npx prisma generate
+          npm --prefix backend ci
+          npm --prefix frontend ci
+          npm --prefix e2e ci
+          cd backend && npx prisma generate
+
+      - name: Install Chromium
+        if: needs.changes.outputs.application == 'true'
+        working-directory: e2e
+        run: npx playwright install chromium --with-deps
+
+      - name: Typecheck browser tests
+        if: needs.changes.outputs.application == 'true'
+        run: npm --prefix e2e run check
+
+      - name: Run real browser and API journeys
+        if: needs.changes.outputs.application == 'true'
+        run: npm --prefix e2e test
+        env:
+          E2E_AUTH: ${{ matrix.mode == 'authenticated' && 'true' || 'false' }}
+
+      - name: Upload browser diagnostics
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always() && needs.changes.outputs.application == 'true'
+        with:
+          name: playwright-${{ matrix.mode }}
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+          retention-days: 7

@@ -1,19 +1,42 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Layout } from "../components/Layout";
 import { useNavigate } from "react-router-dom";
 import * as api from "../api";
 import type { Collection } from "../types";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
+import { usePreference } from "../context/PreferencesContext";
 import { SettingsMainGrid } from "./settings/SettingsMainGrid";
 import { AdvancedSettings } from "./settings/AdvancedSettings";
 import { SettingsConfirmModals } from "./settings/SettingsConfirmModals";
+import { ApiKeysCard } from "./profile/ApiKeysCard";
+import { Toaster } from "sonner";
 import { displayFontFamily } from "../utils/displayFont";
+import { useLocale } from "../context/useLocale";
+import { isExcalidashFile } from "../utils/importUtils";
+import { resetImageCompressionMemo } from "../utils/imageCompression";
+import {
+  IMAGE_COMPRESSION_ENABLED_KEY,
+  readImageCompressionEnabled,
+  readImageCompressionThresholdMb,
+  writeImageCompressionThresholdMb,
+} from "../utils/imageCompressionSettings";
 export const Settings: React.FC = () => {
   const [collections, setCollections] = useState<Collection[]>([]);
   const navigate = useNavigate();
+  const { t } = useLocale();
   const { theme, toggleTheme } = useTheme();
   const { authEnabled, user, authMode } = useAuth();
+  const [editorAutoHide, setEditorAutoHide] = usePreference(
+    "editorAutoHide",
+    false,
+  );
+  const [compactSidebar, setCompactSidebar] = usePreference(
+    "compactSidebar",
+    true,
+  );
+  const mustResetPassword = Boolean(user?.mustResetPassword);
+  const [settingsSuccess, setSettingsSuccess] = useState("");
   const [legacyDbImportConfirmation, setLegacyDbImportConfirmation] = useState<{
     isOpen: boolean;
     file: File | null;
@@ -24,10 +47,10 @@ export const Settings: React.FC = () => {
       currentLatestMigration: string | null;
     };
   }>({ isOpen: false, file: null, info: null });
-  const [importError, setImportError] = useState<{
-    isOpen: boolean;
-    message: string;
-  }>({ isOpen: false, message: "" });
+  const [importError, setImportError] = useState({
+    isOpen: false,
+    message: "",
+  });
   const [importSuccess, setImportSuccess] = useState<{
     isOpen: boolean;
     message: React.ReactNode;
@@ -41,9 +64,6 @@ export const Settings: React.FC = () => {
   }>({ isOpen: false, nextEnabled: null });
   const [authDisableFinalConfirmOpen, setAuthDisableFinalConfirmOpen] =
     useState(false);
-  const [backupExportExt, setBackupExportExt] = useState<
-    "excalidash" | "excalidash.zip"
-  >("excalidash");
   const [backupImportConfirmation, setBackupImportConfirmation] = useState<{
     isOpen: boolean;
     file: File | null;
@@ -61,7 +81,8 @@ export const Settings: React.FC = () => {
     isOpen: boolean;
     message: string;
   }>({ isOpen: false, message: "" });
-  const appVersion = import.meta.env.VITE_APP_VERSION || "Unknown version";
+  const appVersion =
+    import.meta.env.VITE_APP_VERSION || t("settings.unknownVersion");
   const buildLabel = import.meta.env.VITE_APP_BUILD_LABEL;
   const isManagedAuthMode = authMode !== "local";
   const UPDATE_CHANNEL_KEY = "excalidash-update-channel";
@@ -87,51 +108,60 @@ export const Settings: React.FC = () => {
     };
     fetchCollections();
   }, []);
-  const COMPRESSION_ENABLED_KEY = "excalidash-image-compression";
-  const [imageCompression, setImageCompression] = useState<boolean>(() => {
-    const raw =
-      typeof window === "undefined"
-        ? null
-        : window.localStorage?.getItem?.(COMPRESSION_ENABLED_KEY);
-    return raw !== "false";
-  });
+  const [imageCompression, setImageCompression] = useState(
+    readImageCompressionEnabled,
+  );
+  const [imageCompressionThresholdMb, setImageCompressionThresholdMb] =
+    useState(readImageCompressionThresholdMb);
   const toggleImageCompression = () => {
     const next = !imageCompression;
     try {
-      window.localStorage?.setItem?.(COMPRESSION_ENABLED_KEY, String(next));
+      window.localStorage?.setItem?.(
+        IMAGE_COMPRESSION_ENABLED_KEY,
+        String(next),
+      );
     } catch {
       // Ignore unavailable storage in private/embedded contexts.
     }
+    resetImageCompressionMemo();
     setImageCompression(next);
   };
-  const checkForUpdates = async (channel: api.UpdateChannel) => {
-    setUpdateLoading(true);
-    setUpdateError(null);
-    try {
-      const info = await api.getUpdateInfo(channel);
-      setUpdateInfo(info);
-      try {
-        window.localStorage?.setItem?.(
-          `${UPDATE_INFO_KEY}:${channel}`,
-          JSON.stringify(info),
-        );
-      } catch {
-        // Ignore unavailable storage in private/embedded contexts.
-      }
-    } catch (err: unknown) {
-      let message = "Failed to check for updates";
-      if (api.isAxiosError(err)) {
-        message =
-          err.response?.data?.message || err.response?.data?.error || message;
-      }
-      setUpdateError(message);
-    } finally {
-      setUpdateLoading(false);
-    }
+  const updateImageCompressionThreshold = (value: number) => {
+    const next = writeImageCompressionThresholdMb(value);
+    resetImageCompressionMemo();
+    setImageCompressionThresholdMb(next);
   };
+  const checkForUpdates = useCallback(
+    async (channel: api.UpdateChannel) => {
+      setUpdateLoading(true);
+      setUpdateError(null);
+      try {
+        const info = await api.getUpdateInfo(channel);
+        setUpdateInfo(info);
+        try {
+          window.localStorage?.setItem?.(
+            `${UPDATE_INFO_KEY}:${channel}`,
+            JSON.stringify(info),
+          );
+        } catch {
+          // Ignore unavailable storage in private/embedded contexts.
+        }
+      } catch (err: unknown) {
+        let message = t("settings.errors.checkUpdates");
+        if (api.isAxiosError(err)) {
+          message =
+            err.response?.data?.message || err.response?.data?.error || message;
+        }
+        setUpdateError(message);
+      } finally {
+        setUpdateLoading(false);
+      }
+    },
+    [t],
+  );
   useEffect(() => {
     void checkForUpdates(updateChannel);
-  }, []);
+  }, [updateChannel, checkForUpdates]);
   const setAuthEnabled = async (enabled: boolean) => {
     setAuthToggleLoading(true);
     setAuthToggleError(null);
@@ -148,7 +178,7 @@ export const Settings: React.FC = () => {
       }
       window.location.reload();
     } catch (err: unknown) {
-      let message = "Failed to update authentication setting";
+      let message = t("settings.errors.updateAuth");
       if (api.isAxiosError(err)) {
         message =
           err.response?.data?.message || err.response?.data?.error || message;
@@ -165,8 +195,7 @@ export const Settings: React.FC = () => {
   };
   const exportBackup = async () => {
     try {
-      const extQuery = backupExportExt === "excalidash.zip" ? "?ext=zip" : "";
-      const response = await api.api.get(`/export/excalidash${extQuery}`, {
+      const response = await api.api.get("/export/excalidash", {
         responseType: "blob",
       });
       const blob = new Blob([response.data], { type: "application/zip" });
@@ -174,10 +203,7 @@ export const Settings: React.FC = () => {
       const link = document.createElement("a");
       link.href = url;
       const date = new Date().toISOString().split("T")[0];
-      link.download =
-        backupExportExt === "excalidash.zip"
-          ? `excalidash-backup-${date}.excalidash.zip`
-          : `excalidash-backup-${date}.excalidash`;
+      link.download = `excalidash-backup-${date}.excalidash`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -186,11 +212,18 @@ export const Settings: React.FC = () => {
       console.error("Backup export failed:", err);
       setBackupImportError({
         isOpen: true,
-        message: "Failed to export backup. Please try again.",
+        message: t("settings.errors.exportBackup"),
       });
     }
   };
   const verifyBackupFile = async (file: File) => {
+    if (!isExcalidashFile(file)) {
+      setBackupImportError({
+        isOpen: true,
+        message: t("settings.errors.excalidashRequired"),
+      });
+      return;
+    }
     setBackupImportLoading(true);
     try {
       const formData = new FormData();
@@ -219,7 +252,7 @@ export const Settings: React.FC = () => {
       });
     } catch (err: unknown) {
       console.error("Backup verify failed:", err);
-      let message = "Failed to verify backup file.";
+      let message = t("settings.errors.verifyBackup");
       if (api.isAxiosError(err)) {
         message =
           err.response?.data?.message || err.response?.data?.error || message;
@@ -255,7 +288,7 @@ export const Settings: React.FC = () => {
       });
     } catch (err: unknown) {
       console.error("Legacy DB verify failed:", err);
-      let message = "Failed to verify legacy database file.";
+      let message = t("settings.errors.verifyLegacyDb");
       if (api.isAxiosError(err)) {
         message =
           err.response?.data?.message || err.response?.data?.error || message;
@@ -295,80 +328,102 @@ export const Settings: React.FC = () => {
       onDeleteCollection={handleDeleteCollection}
     >
       {" "}
-      <h1
-        className="text-3xl sm:text-4xl lg:text-5xl mb-6 lg:mb-8 text-slate-900 dark:text-white pl-1"
-        style={{ fontFamily: displayFontFamily }}
-      >
-        {" "}
-        Settings{" "}
-      </h1>{" "}
-      {authToggleError && (
-        <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 rounded-xl">
+      <div className="mx-auto w-full max-w-3xl">
+        <Toaster position="top-right" />
+        <h1
+          className="text-3xl sm:text-4xl lg:text-5xl mb-6 lg:mb-8 text-slate-900 dark:text-white pl-1"
+          style={{ fontFamily: displayFontFamily }}
+        >
           {" "}
-          <p className="text-red-800 dark:text-red-200 font-medium">
-            {authToggleError}
-          </p>{" "}
+          {t("sidebar.settings")}{" "}
+        </h1>{" "}
+        {authToggleError && (
+          <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 rounded-xl">
+            {" "}
+            <p className="text-red-800 dark:text-red-200 font-medium">
+              {authToggleError}
+            </p>{" "}
+          </div>
+        )}{" "}
+        {settingsSuccess && (
+          <div className="mb-6 rounded-xl border-2 border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-950">
+            <p className="font-medium text-green-800 dark:text-green-200">
+              {settingsSuccess}
+            </p>
+          </div>
+        )}{" "}
+        <div className="space-y-10">
+          <ApiKeysCard
+            disabled={mustResetPassword}
+            onSuccess={setSettingsSuccess}
+          />
         </div>
-      )}{" "}
-      <SettingsMainGrid
-        backupExportExt={backupExportExt}
-        setBackupExportExt={setBackupExportExt}
-        exportBackup={exportBackup}
-        theme={theme}
-        toggleTheme={toggleTheme}
-        imageCompression={imageCompression}
-        toggleImageCompression={toggleImageCompression}
-        updateChannel={updateChannel}
-        updateInfo={updateInfo}
-        updateLoading={updateLoading}
-        updateError={updateError}
-        onUpdateChannelChange={(next) => {
-          try {
-            window.localStorage?.setItem?.(UPDATE_CHANNEL_KEY, next);
-          } catch {
-            // Ignore unavailable storage in private/embedded contexts.
-          }
-          setUpdateChannel(next);
-          void checkForUpdates(next);
-        }}
-        onCheckForUpdates={() => void checkForUpdates(updateChannel)}
-      />{" "}
-      <AdvancedSettings
-        authEnabled={authEnabled}
-        authMode={authMode}
-        authToggleLoading={authToggleLoading}
-        backupImportLoading={backupImportLoading}
-        legacyDbImportLoading={legacyDbImportLoading}
-        isManagedAuthMode={isManagedAuthMode}
-        user={user}
-        appVersion={appVersion}
-        buildLabel={buildLabel}
-        verifyBackupFile={verifyBackupFile}
-        verifyLegacyDbFile={verifyLegacyDbFile}
-        confirmToggleAuthEnabled={confirmToggleAuthEnabled}
-        setImportError={setImportError}
-        setImportSuccess={setImportSuccess}
-      />{" "}
-      <SettingsConfirmModals
-        legacyDbImportConfirmation={legacyDbImportConfirmation}
-        setLegacyDbImportConfirmation={setLegacyDbImportConfirmation}
-        importError={importError}
-        setImportError={setImportError}
-        importSuccess={importSuccess}
-        setImportSuccess={setImportSuccess}
-        authToggleConfirm={authToggleConfirm}
-        setAuthToggleConfirm={setAuthToggleConfirm}
-        authDisableFinalConfirmOpen={authDisableFinalConfirmOpen}
-        setAuthDisableFinalConfirmOpen={setAuthDisableFinalConfirmOpen}
-        setAuthEnabled={setAuthEnabled}
-        backupImportConfirmation={backupImportConfirmation}
-        setBackupImportConfirmation={setBackupImportConfirmation}
-        backupImportSuccess={backupImportSuccess}
-        setBackupImportSuccess={setBackupImportSuccess}
-        backupImportError={backupImportError}
-        setBackupImportError={setBackupImportError}
-        setBackupImportLoading={setBackupImportLoading}
-      />{" "}
+        <div className="mt-10">
+          <SettingsMainGrid
+            exportBackup={exportBackup}
+            theme={theme}
+            toggleTheme={toggleTheme}
+            imageCompression={imageCompression}
+            toggleImageCompression={toggleImageCompression}
+            imageCompressionThresholdMb={imageCompressionThresholdMb}
+            onImageCompressionThresholdChange={updateImageCompressionThreshold}
+            editorAutoHide={editorAutoHide}
+            onEditorAutoHideChange={setEditorAutoHide}
+            compactSidebar={compactSidebar}
+            onCompactSidebarChange={setCompactSidebar}
+            updateChannel={updateChannel}
+            updateInfo={updateInfo}
+            updateLoading={updateLoading}
+            updateError={updateError}
+            onUpdateChannelChange={(next) => {
+              try {
+                window.localStorage?.setItem?.(UPDATE_CHANNEL_KEY, next);
+              } catch {
+                // Ignore unavailable storage in private/embedded contexts.
+              }
+              setUpdateChannel(next);
+              void checkForUpdates(next);
+            }}
+            onCheckForUpdates={() => void checkForUpdates(updateChannel)}
+          />
+        </div>{" "}
+        <AdvancedSettings
+          authEnabled={authEnabled}
+          authMode={authMode}
+          authToggleLoading={authToggleLoading}
+          backupImportLoading={backupImportLoading}
+          legacyDbImportLoading={legacyDbImportLoading}
+          isManagedAuthMode={isManagedAuthMode}
+          user={user}
+          appVersion={appVersion}
+          buildLabel={buildLabel}
+          verifyBackupFile={verifyBackupFile}
+          verifyLegacyDbFile={verifyLegacyDbFile}
+          confirmToggleAuthEnabled={confirmToggleAuthEnabled}
+          setImportError={setImportError}
+          setImportSuccess={setImportSuccess}
+        />{" "}
+        <SettingsConfirmModals
+          legacyDbImportConfirmation={legacyDbImportConfirmation}
+          setLegacyDbImportConfirmation={setLegacyDbImportConfirmation}
+          importError={importError}
+          setImportError={setImportError}
+          importSuccess={importSuccess}
+          setImportSuccess={setImportSuccess}
+          authToggleConfirm={authToggleConfirm}
+          setAuthToggleConfirm={setAuthToggleConfirm}
+          authDisableFinalConfirmOpen={authDisableFinalConfirmOpen}
+          setAuthDisableFinalConfirmOpen={setAuthDisableFinalConfirmOpen}
+          setAuthEnabled={setAuthEnabled}
+          backupImportConfirmation={backupImportConfirmation}
+          setBackupImportConfirmation={setBackupImportConfirmation}
+          backupImportSuccess={backupImportSuccess}
+          setBackupImportSuccess={setBackupImportSuccess}
+          backupImportError={backupImportError}
+          setBackupImportError={setBackupImportError}
+          setBackupImportLoading={setBackupImportLoading}
+        />{" "}
+      </div>
     </Layout>
   );
 };

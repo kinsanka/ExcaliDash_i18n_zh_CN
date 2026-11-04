@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import type { NavigateFunction } from "react-router-dom";
 import * as api from "../../api";
 import type { Collection, DrawingSummary } from "../../types";
+import { useLocale } from "../../context/useLocale";
 
 type UseDashboardDrawingActionsParams = {
   drawings: DrawingSummary[];
@@ -36,6 +37,7 @@ export const useDashboardDrawingActions = ({
   refreshData,
   navigate,
 }: UseDashboardDrawingActionsParams) => {
+  const { t } = useLocale();
   const [drawingToDelete, setDrawingToDelete] = useState<string | null>(null);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [showImportError, setShowImportError] = useState<{
@@ -53,7 +55,9 @@ export const useDashboardDrawingActions = ({
     (collection) => collection.id === selectedCollectionId,
   );
   const isSharedCollection = !!(
-    currentCollection && currentCollection.isOwner === false
+    selectedCollectionId !== "trash" &&
+    currentCollection &&
+    currentCollection.isOwner === false
   );
 
   const handleViewerActionError = (message: string) =>
@@ -62,13 +66,16 @@ export const useDashboardDrawingActions = ({
   const handleCreateDrawing = async () => {
     if (isTrashView || isSharedView) return;
     if (isSharedCollection && currentCollection?.sharedRole !== "edit") {
-      handleViewerActionError("Viewers can't create new drawings");
+      handleViewerActionError(t("dashboard.viewerCannotCreate"));
       return;
     }
     try {
       const targetCollectionId =
         selectedCollectionId === undefined ? null : selectedCollectionId;
-      const { id } = await api.createDrawing("Untitled Drawing", targetCollectionId);
+      const { id } = await api.createDrawing(
+        t("dashboard.untitledDrawing"),
+        targetCollectionId,
+      );
       navigate(`/editor/${id}`);
     } catch (err) {
       console.error(err);
@@ -78,7 +85,7 @@ export const useDashboardDrawingActions = ({
   const handleImportDrawings = async (files: FileList | null) => {
     if (!files || isTrashView || isSharedView) return;
     if (isSharedCollection && currentCollection?.sharedRole !== "edit") {
-      handleViewerActionError("Viewers can't import drawings");
+      handleViewerActionError(t("dashboard.viewerCannotImport"));
       return;
     }
     const targetCollectionId =
@@ -284,8 +291,7 @@ export const useDashboardDrawingActions = ({
       if (libFiles.length > 0) {
         setShowImportError({
           isOpen: true,
-          message:
-            "Library (.excalidrawlib) imports are not supported in this build. Please import drawings (.excalidraw/.json) instead.",
+          message: t("dashboard.errors.libraryImportUnsupported"),
         });
       }
       const drawingFiles = files.filter(
@@ -343,13 +349,16 @@ export const useDashboardDrawingActions = ({
     if (preview) event.dataTransfer.setDragImage(preview, 80, 50);
   };
 
-  const handlePreviewGenerated = (id: string, preview: string) => {
-    setDrawings((current) =>
-      current.map((drawing) =>
-        drawing.id === id ? { ...drawing, preview } : drawing,
-      ),
-    );
-  };
+  const handlePreviewGenerated = useCallback(
+    (id: string, preview: string) => {
+      setDrawings((current) =>
+        current.map((drawing) =>
+          drawing.id === id ? { ...drawing, preview } : drawing,
+        ),
+      );
+    },
+    [setDrawings],
+  );
 
   return {
     drawingToDelete,
@@ -383,4 +392,3 @@ export const useDashboardDrawingActions = ({
     handlePreviewGenerated,
   };
 };
-

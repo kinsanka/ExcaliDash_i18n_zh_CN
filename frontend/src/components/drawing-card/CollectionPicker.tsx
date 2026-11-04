@@ -2,6 +2,8 @@ import React from "react";
 import clsx from "clsx";
 import type { Collection, DrawingSummary } from "../../types";
 import { CollectionMoveOptions } from "./CollectionMoveOptions";
+import { useAuth } from "../../context/AuthContext";
+import { useLocale } from "../../context/useLocale";
 
 interface CollectionPickerProps {
   drawing: DrawingSummary;
@@ -24,37 +26,63 @@ export const CollectionPicker: React.FC<CollectionPickerProps> = ({
   onClose,
   onMoveToCollection,
 }) => {
+  const { user } = useAuth();
+  const { t } = useLocale();
+  const showOwner = Boolean(
+    user && drawing.userId && drawing.userId !== user.id,
+  );
   const collectionName = drawing.collectionId
     ? collections.find((collection) => collection.id === drawing.collectionId)
-        ?.name || "Collection"
-    : "Unorganized";
+        ?.name || t("collection.fallbackName")
+    : t("sidebar.unorganized");
 
   return (
-    <div className="relative" onClick={(e) => e.stopPropagation()}>
+    <div onClick={(e) => e.stopPropagation()}>
       <div className="flex items-center gap-1 flex-wrap justify-start xs:justify-end">
-        <button
-          onClick={() => {
-            if (isShared || isSharedCollection) return;
-            onToggle();
-          }}
-          data-testid={`collection-picker-${drawing.id}`}
-          aria-haspopup="listbox"
-          aria-expanded={isOpen}
-          disabled={isShared || isSharedCollection}
-          className={clsx(
-            "px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wide max-w-[120px] truncate transition-all border",
-            isShared || isSharedCollection
-              ? "bg-slate-50 dark:bg-neutral-800/40 text-slate-400 dark:text-neutral-500 border-neutral-100 dark:border-neutral-800 cursor-not-allowed"
-              : "bg-slate-50 dark:bg-neutral-800 text-slate-500 dark:text-neutral-400 cursor-pointer border-neutral-200/60 dark:border-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-700/50",
-          )}
-        >
-          {isShared ? "Shared" : collectionName}
-        </button>
+        <div className="relative">
+          <button
+            onClick={() => {
+              if (isShared || isSharedCollection) return;
+              onToggle();
+            }}
+            data-testid={`collection-picker-${drawing.id}`}
+            aria-haspopup="listbox"
+            aria-expanded={isOpen}
+            disabled={isShared || isSharedCollection}
+            className={clsx(
+              "max-w-[120px] truncate rounded-md border px-2 py-0.5 text-[10px] font-semibold transition-all",
+              isShared || isSharedCollection
+                ? "bg-slate-50 dark:bg-neutral-800/40 text-slate-400 dark:text-neutral-500 border-neutral-100 dark:border-neutral-800 cursor-not-allowed"
+                : "bg-slate-50 dark:bg-neutral-800 text-slate-500 dark:text-neutral-400 cursor-pointer border-neutral-200/60 dark:border-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-700/50",
+            )}
+          >
+            {isShared ? t("sidebar.shared") : collectionName}
+          </button>
 
-        {drawing.creatorName && (
+          {!isShared && isOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={onClose} />
+              <div className="ui-menu absolute left-0 xs:left-auto xs:right-0 bottom-full mb-1.5 w-48 z-20 max-h-56 overflow-y-auto custom-scrollbar animate-in fade-in slide-in-from-bottom-2 duration-150">
+                <CollectionMoveOptions
+                  collections={collections}
+                  currentCollectionId={drawing.collectionId}
+                  drawingId={drawing.id}
+                  onMoveToCollection={onMoveToCollection}
+                  onDone={onClose}
+                  optionClassName="ui-menu-item justify-between text-xs"
+                  selectedClassName="ui-menu-item-selected"
+                  unselectedClassName=""
+                  checkSize={12}
+                />
+              </div>
+            </>
+          )}
+        </div>
+
+        {showOwner && drawing.creatorName && (
           <span
             title={drawing.creatorName}
-            className="px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wide border bg-indigo-50/50 dark:bg-indigo-900/10 text-indigo-500 dark:text-indigo-400 border-indigo-100 dark:border-indigo-900/50 truncate max-w-[120px]"
+            className="max-w-[120px] truncate rounded-md border border-indigo-100 bg-indigo-50/50 px-2 py-0.5 text-[10px] font-semibold text-indigo-500 dark:border-indigo-900/50 dark:bg-indigo-900/10 dark:text-indigo-400"
           >
             {drawing.creatorName}
           </span>
@@ -65,36 +93,18 @@ export const CollectionPicker: React.FC<CollectionPickerProps> = ({
           drawing.accessLevel !== "owner" && (
             <span
               className={clsx(
-                "px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wide border",
+                "rounded-md border px-2 py-0.5 text-[10px] font-semibold",
                 drawing.accessLevel === "edit"
                   ? "bg-emerald-50/50 dark:bg-emerald-900/10 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-900/30"
                   : "bg-amber-50/50 dark:bg-amber-900/10 text-amber-600 dark:text-amber-400 border-amber-100 dark:border-amber-900/30",
               )}
             >
-              {drawing.accessLevel === "edit" ? "Editor" : "Viewer"}
+              {drawing.accessLevel === "edit"
+                ? t("sidebar.editor")
+                : t("sidebar.viewer")}
             </span>
           )}
       </div>
-
-      {!isShared && isOpen && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={onClose} />
-          <div className="absolute right-0 bottom-full mb-1.5 w-48 bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 shadow-lg z-20 py-1 max-h-56 overflow-y-auto custom-scrollbar animate-in fade-in slide-in-from-bottom-2 duration-150">
-            <CollectionMoveOptions
-              collections={collections}
-              currentCollectionId={drawing.collectionId}
-              drawingId={drawing.id}
-              onMoveToCollection={onMoveToCollection}
-              onDone={onClose}
-              optionClassName="w-full px-3 py-2 text-xs text-left flex items-center justify-between hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors truncate"
-              selectedClassName="text-neutral-900 dark:text-white font-bold bg-neutral-100 dark:bg-neutral-800"
-              unselectedClassName="text-slate-600 dark:text-neutral-400"
-              checkSize={12}
-            />
-          </div>
-        </>
-      )}
     </div>
   );
 };
-

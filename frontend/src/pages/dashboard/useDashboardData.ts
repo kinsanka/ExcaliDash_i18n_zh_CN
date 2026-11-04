@@ -14,6 +14,7 @@ type UseDashboardDataOptions = {
   pageSize: number;
   onRefreshSuccess?: () => void;
 };
+
 export const useDashboardData = ({
   debouncedSearch,
   selectedCollectionId,

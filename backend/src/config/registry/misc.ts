@@ -41,4 +41,3 @@ export const linkSharingEnv: readonly EnvVarSpec[] = [
     doc: "Maximum allowed lifetime (ms) for any share link (90 days).",
   },
 ];
-

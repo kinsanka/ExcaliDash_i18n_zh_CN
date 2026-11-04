@@ -1,6 +1,15 @@
-import React from 'react';
-import { Settings as SettingsIcon } from 'lucide-react';
-import { useI18n } from '../../context/I18nContext';
+import React from "react";
+import { Timer } from "lucide-react";
+import { PlayfulSwitch } from "../../components/PlayfulSwitch";
+import {
+  SettingsCard,
+  SettingsRow,
+  SettingsSectionHeader,
+  settingsButtonClass,
+  settingsSelectClass,
+} from "../settings/SettingsRow";
+import { useLocale } from "../../context/useLocale";
+import type { TranslationKey } from "../../i18n";
 
 type LoginRateLimitCardProps = {
   loading: boolean;
@@ -20,9 +29,13 @@ type LoginRateLimitCardProps = {
   onReset: () => void | Promise<void>;
 };
 
-const getSaveStatusLabel = (saving: boolean, autoSaveQueued: boolean, dirty: boolean, t: (key: string) => string) => {
-  if (saving || autoSaveQueued) return t('admin.savingChanges');
-  return dirty ? t('admin.unsavedChanges') : t('admin.allChangesSaved');
+const getSaveStatusKey = (
+  saving: boolean,
+  autoSaveQueued: boolean,
+  dirty: boolean,
+): TranslationKey => {
+  if (saving || autoSaveQueued) return "common.saving";
+  return dirty ? "admin.rateLimit.unsaved" : "admin.rateLimit.saved";
 };
 
 export const LoginRateLimitCard: React.FC<LoginRateLimitCardProps> = ({
@@ -42,101 +55,96 @@ export const LoginRateLimitCard: React.FC<LoginRateLimitCardProps> = ({
   onResetIdentifierChange,
   onReset,
 }) => {
-  const { t } = useI18n();
-
+  const { t } = useLocale();
   return (
-  <div className="mb-6 bg-white dark:bg-neutral-900 border-2 border-black dark:border-neutral-700 rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.2)] p-4 sm:p-6">
-    <div className="flex items-center gap-3 mb-4">
-      <div className="w-12 h-12 bg-slate-50 dark:bg-neutral-800 rounded-xl flex items-center justify-center border-2 border-slate-200 dark:border-neutral-700">
-        <SettingsIcon size={24} className="text-slate-700 dark:text-neutral-200" />
-      </div>
-      <div className="min-w-0">
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-white">{t('admin.loginRateLimiting')}</h2>
-        <p className="text-sm text-slate-600 dark:text-neutral-400 font-medium">
-          {t('admin.loginRateLimitingDesc')}
-        </p>
-      </div>
-      {loading && (
-        <span className="ml-auto text-sm text-slate-500 dark:text-neutral-500 font-medium">
-          {t('common.loading')}
+    <section className="mb-6">
+      <SettingsSectionHeader
+        icon={<Timer size={20} />}
+        tileClassName="border-black bg-amber-400 text-black dark:border-neutral-700 dark:bg-amber-400 dark:text-black"
+        title={t("admin.rateLimit.title")}
+        subtitle={t("admin.rateLimit.subtitle")}
+      >
+        <span className="text-xs font-bold text-slate-400 dark:text-neutral-500">
+          {loading
+            ? t("admin.access.loading")
+            : t(getSaveStatusKey(saving, autoSaveQueued, dirty))}
         </span>
-      )}
-    </div>
+      </SettingsSectionHeader>
 
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <div>
-        <label className="block text-sm font-bold text-slate-700 dark:text-neutral-300 mb-2">
-          {t('admin.rateLimiting')}
-        </label>
-        <button
-          type="button"
-          onClick={onToggleEnabled}
-          className={`w-full px-4 py-3 rounded-xl border-2 font-bold transition-all text-sm ${
+      <SettingsCard>
+        <SettingsRow
+          title={t("admin.rateLimit.rowTitle")}
+          description={
             enabled
-              ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300'
-              : 'border-slate-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-slate-600 dark:text-neutral-300'
-          }`}
+              ? t("admin.rateLimit.active")
+              : t("admin.rateLimit.inactive")
+          }
         >
-          {enabled ? t('admin.enabled') : t('admin.disabled')}
-        </button>
-      </div>
-      <div>
-        <label className="block text-sm font-bold text-slate-700 dark:text-neutral-300 mb-2">
-          {t('admin.windowMinutes')}
-        </label>
-        <input
-          type="number"
-          min={1}
-          value={windowMinutes}
-          onChange={(event) => onWindowMinutesChange(Number(event.target.value))}
-          className="w-full px-4 py-3 bg-white dark:bg-neutral-800 border-2 border-slate-200 dark:border-neutral-700 rounded-xl text-slate-900 dark:text-white outline-none"
-        />
-      </div>
-      <div>
-        <label className="block text-sm font-bold text-slate-700 dark:text-neutral-300 mb-2">
-          {t('admin.maxAttempts')}
-        </label>
-        <input
-          type="number"
-          min={1}
-          value={maxAttempts}
-          onChange={(event) => onMaxAttemptsChange(Number(event.target.value))}
-          className="w-full px-4 py-3 bg-white dark:bg-neutral-800 border-2 border-slate-200 dark:border-neutral-700 rounded-xl text-slate-900 dark:text-white outline-none"
-        />
-      </div>
-    </div>
+          <PlayfulSwitch
+            checked={enabled}
+            onChange={onToggleEnabled}
+            ariaLabel={t("admin.rateLimit.toggle")}
+          />
+        </SettingsRow>
 
-    <div className="mt-4 flex flex-col lg:flex-row lg:items-end justify-between gap-4">
-      <div className="min-w-0 flex-1">
-        <label className="block text-sm font-bold text-slate-700 dark:text-neutral-300 mb-2">
-          {t('admin.resetLockout')}
-        </label>
-        <input
-          list="admin-user-identifiers"
-          value={resetIdentifier}
-          onChange={(event) => onResetIdentifierChange(event.target.value)}
-          placeholder={t('admin.resetLockoutPlaceholder')}
-          className="w-full px-4 py-3 bg-white dark:bg-neutral-800 border-2 border-slate-200 dark:border-neutral-700 rounded-xl text-slate-900 dark:text-white outline-none"
-        />
-        <datalist id="admin-user-identifiers">
-          {userEmails.map((email) => (
-            <option key={email} value={email} />
-          ))}
-        </datalist>
-      </div>
-      <div className="flex items-center gap-3 flex-shrink-0">
-        <p className="text-xs sm:text-sm font-medium text-slate-500 dark:text-neutral-400">
-          {getSaveStatusLabel(saving, autoSaveQueued, dirty, t)}
-        </p>
-        <button
-          onClick={() => void onReset()}
-          disabled={resetLoading}
-          className="px-4 py-2 text-sm font-bold rounded-xl border-2 border-black dark:border-neutral-700 bg-white dark:bg-neutral-900 text-slate-900 dark:text-neutral-200 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] hover:-translate-y-0.5 transition-all disabled:opacity-60"
+        <SettingsRow
+          title={t("admin.rateLimit.attempts")}
+          description={t("admin.rateLimit.attemptsDescription")}
         >
-          {resetLoading ? t('admin.resetting') : t('admin.reset')}
-        </button>
-      </div>
-    </div>
-  </div>
+          <input
+            type="number"
+            min={1}
+            aria-label={t("admin.rateLimit.maxAttempts")}
+            value={maxAttempts}
+            onChange={(event) =>
+              onMaxAttemptsChange(Number(event.target.value))
+            }
+            className={`${settingsSelectClass} w-20`}
+          />
+          <span className="text-xs font-bold text-slate-400 dark:text-neutral-500">
+            {t("admin.rateLimit.per")}
+          </span>
+          <input
+            type="number"
+            min={1}
+            aria-label={t("admin.rateLimit.windowMinutes")}
+            value={windowMinutes}
+            onChange={(event) =>
+              onWindowMinutesChange(Number(event.target.value))
+            }
+            className={`${settingsSelectClass} w-20`}
+          />
+          <span className="text-xs font-bold text-slate-400 dark:text-neutral-500">
+            {t("admin.rateLimit.minutesShort")}
+          </span>
+        </SettingsRow>
+
+        <SettingsRow
+          title={t("admin.rateLimit.resetLockout")}
+          description={t("admin.rateLimit.resetLockoutDescription")}
+        >
+          <input
+            list="admin-user-identifiers"
+            aria-label={t("admin.rateLimit.accountToUnlock")}
+            value={resetIdentifier}
+            onChange={(event) => onResetIdentifierChange(event.target.value)}
+            placeholder="user@example.com"
+            className={`${settingsSelectClass} w-48`}
+          />
+          <datalist id="admin-user-identifiers">
+            {userEmails.map((email) => (
+              <option key={email} value={email} />
+            ))}
+          </datalist>
+          <button
+            onClick={() => void onReset()}
+            disabled={resetLoading}
+            className={settingsButtonClass}
+          >
+            {resetLoading ? t("admin.resetting") : t("admin.reset")}
+          </button>
+        </SettingsRow>
+      </SettingsCard>
+    </section>
   );
 };

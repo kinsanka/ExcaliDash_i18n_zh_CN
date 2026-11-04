@@ -1,7 +1,6 @@
 import {
   buildFilesDiff,
   collectReferencedFileIds,
-  fileIdFromS3Key,
   type StoredFileRecord,
   type S3ObjectRecord,
 } from "./helpers";
@@ -31,11 +30,9 @@ export const buildTrimPlan = (elements: any[], files: FilesJson) => {
 export const buildTrimS3CleanupPlan = ({
   survivingFileIds,
   storedRecords,
-  s3Objects,
 }: {
   survivingFileIds: Set<string>;
   storedRecords: StoredFileRecord[];
-  s3Objects: S3ObjectRecord[];
 }) => {
   const orphanKeys = new Set<string>();
   const orphanFileIds = new Set<string>();
@@ -46,13 +43,6 @@ export const buildTrimS3CleanupPlan = ({
       // to be reclaimed. s3-mode rows also strand an object to delete.
       if (record.s3Key) orphanKeys.add(record.s3Key);
       orphanFileIds.add(record.fileId);
-    }
-  }
-
-  for (const obj of s3Objects) {
-    const fileId = fileIdFromS3Key(obj.key);
-    if (fileId && !survivingFileIds.has(fileId)) {
-      orphanKeys.add(obj.key);
     }
   }
 
@@ -131,4 +121,3 @@ export const buildOrphanDeletePlan = ({
     deletedCount: fileIds.length,
   };
 };
-

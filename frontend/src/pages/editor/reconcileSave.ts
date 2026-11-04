@@ -1,6 +1,10 @@
 import type { MutableRefObject } from "react";
 import * as api from "../../api";
 import { reconcileElements } from "../../utils/sync";
+import {
+  filesNeedRehydration,
+  rehydrateFilesFromUrls,
+} from "../../utils/rehydrateFiles";
 
 type ReconcileRefs = {
   currentDrawingVersion: MutableRefObject<number | null>;
@@ -23,19 +27,39 @@ export const reloadAndReconcile = async (
   drawingId: string,
   localElements: readonly any[],
   localFiles: Record<string, any>,
-): Promise<{ elements: readonly any[]; files: Record<string, any> }> => {
+  isCurrent: () => boolean = () => true,
+): Promise<{ elements: readonly any[]; files: Record<string, any> } | null> => {
+  if (!isCurrent()) return null;
   const remote = await api.getDrawing(drawingId);
-  const remoteElements = Array.isArray(remote.elements) ? remote.elements : [];
-  const remoteFiles = (remote.files as Record<string, any> | undefined) || {};
-  const mergedElements = reconcileElements(
-    Array.from(localElements),
-    remoteElements,
-  );
-  const mergedFiles = { ...remoteFiles, ...localFiles };
-  if (typeof remote.version === "number") {
-    refs.currentDrawingVersion.current = remote.version;
-  }
+  if (!isCurrent()) return null;
+  const storedRemoteFiles =
+    (remote.files as Record<string, any> | undefined) || {};
+  const remoteFiles = filesNeedRehydration(storedRemoteFiles)
+    ? await rehydrateFilesFromUrls(storedRemoteFiles)
+    : storedRemoteFiles;
+  if (!isCurrent()) return null;
   const editor = refs.excalidrawAPI.current;
+  const liveElements =
+    editor?.getSceneElementsIncludingDeleted?.() ?? refs.latestElements.current;
+  const remoteElements = Array.isArray(remote.elements) ? remote.elements : [];
+  const mergedElements = reconcileElements(
+    reconcileElements(localElements, liveElements),
+    remoteElements,
+    editor?.getAppState?.(),
+    true,
+  );
+  const mergedFiles = {
+    ...remoteFiles,
+    ...localFiles,
+    ...refs.latestFiles.current,
+    ...editor?.getFiles?.(),
+  };
+  if (typeof remote.version === "number") {
+    refs.currentDrawingVersion.current = Math.max(
+      refs.currentDrawingVersion.current ?? 0,
+      remote.version,
+    );
+  }
   if (editor) {
     refs.isSyncing.current = true;
     try {
@@ -43,7 +67,10 @@ export const reloadAndReconcile = async (
         editor.addFiles(Object.values(mergedFiles));
       }
       if (typeof editor.updateScene === "function") {
-        editor.updateScene({ elements: mergedElements });
+        editor.updateScene({
+          elements: mergedElements,
+          captureUpdate: "NEVER",
+        });
       }
     } finally {
       refs.isSyncing.current = false;
@@ -54,4 +81,3 @@ export const reloadAndReconcile = async (
   refs.lastSyncedFiles.current = mergedFiles;
   return { elements: mergedElements, files: mergedFiles };
 };
-

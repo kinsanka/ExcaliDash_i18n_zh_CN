@@ -1,5 +1,6 @@
 import { api } from "../api";
 import { type UploadStatus } from "../context/UploadContext";
+import { translateCurrent as t } from "../i18n";
 import {
   coerceTimestamp,
   createCollectionResolver,
@@ -10,6 +11,9 @@ import {
   type LegacyExportDrawing,
 } from "./importHelpers";
 
+export const isExcalidashFile = (file: Pick<File, "name">): boolean =>
+  file.name.toLowerCase().endsWith(".excalidash");
+
 export const importDrawings = async (
   files: File[],
   targetCollectionId: string | null,
@@ -18,15 +22,19 @@ export const importDrawings = async (
     fileIndex: number,
     status: UploadStatus,
     progress: number,
-    error?: string
-  ) => void
+    error?: string,
+  ) => void,
 ) => {
   const drawingFiles = files.filter(
-    (f) => f.name.endsWith(".json") || f.name.endsWith(".excalidraw")
+    (f) => f.name.endsWith(".json") || f.name.endsWith(".excalidraw"),
   );
 
   if (drawingFiles.length === 0) {
-    return { success: 0, failed: 0, errors: ["No supported files found."] };
+    return {
+      success: 0,
+      failed: 0,
+      errors: [t("import.errors.noSupportedFiles")],
+    };
   }
 
   let successCount = 0;
@@ -43,14 +51,21 @@ export const importDrawings = async (
     drawingFiles.map(async (file, drawingIndex) => {
       const fileIndex = originalIndexMap.get(drawingIndex) ?? drawingIndex;
       try {
-        if (onProgress) onProgress(fileIndex, 'processing', 0);
+        if (onProgress) onProgress(fileIndex, "processing", 0);
 
         const text = await file.text();
         const parsed = JSON.parse(text) as unknown;
         const extracted = extractDrawingData(parsed);
-        if (!extracted) throw new Error(`Invalid file structure: ${file.name}`);
+        if (!extracted)
+          throw new Error(
+            t("import.errors.invalidFileStructure", { name: file.name }),
+          );
 
-        const svg = await makeSvgPreview(extracted.elements, extracted.appState, extracted.files);
+        const svg = await makeSvgPreview(
+          extracted.elements,
+          extracted.appState,
+          extracted.files,
+        );
 
         const payload = {
           name: file.name.replace(/\.(json|excalidraw)$/, ""),
@@ -63,7 +78,7 @@ export const importDrawings = async (
           preview: svg.outerHTML,
         };
 
-        if (onProgress) onProgress(fileIndex, 'uploading', 0);
+        if (onProgress) onProgress(fileIndex, "uploading", 0);
 
         await api.post("/drawings", payload, {
           headers: {
@@ -72,16 +87,15 @@ export const importDrawings = async (
           onUploadProgress: (progressEvent) => {
             if (onProgress && progressEvent.total) {
               const percentCompleted = Math.round(
-                (progressEvent.loaded * 100) / progressEvent.total
+                (progressEvent.loaded * 100) / progressEvent.total,
               );
-              onProgress(fileIndex, 'uploading', percentCompleted);
+              onProgress(fileIndex, "uploading", percentCompleted);
             }
           },
         });
 
-        if (onProgress) onProgress(fileIndex, 'success', 100);
+        if (onProgress) onProgress(fileIndex, "success", 100);
         successCount++;
-
       } catch (err: any) {
         console.error(`Failed to import ${file.name}:`, err);
         failCount++;
@@ -89,11 +103,11 @@ export const importDrawings = async (
           err?.response?.data?.message ||
           err?.response?.data?.error ||
           err?.message ||
-          "Upload failed";
+          t("import.errors.uploadFailed");
         errors.push(`${file.name}: ${errorMessage}`);
-        if (onProgress) onProgress(fileIndex, 'error', 0, errorMessage);
+        if (onProgress) onProgress(fileIndex, "error", 0, errorMessage);
       }
-    })
+    }),
   );
 
   if (successCount > 0 && onSuccess) {
@@ -102,6 +116,7 @@ export const importDrawings = async (
 
   return { success: successCount, failed: failCount, errors };
 };
+
 /**
  * Legacy import helper.
  * - Supports individual `.excalidraw` / Excalidraw `.json` drawings (same as importDrawings)
@@ -115,18 +130,22 @@ export const importLegacyFiles = async (
     fileIndex: number,
     status: UploadStatus,
     progress: number,
-    error?: string
-  ) => void
+    error?: string,
+  ) => void,
 ) => {
   const drawingFiles = files.filter(
     (f) =>
       f.name.endsWith(".json") ||
       f.name.endsWith(".excalidraw") ||
-      f.name.endsWith(".zip")
+      f.name.endsWith(".zip"),
   );
 
   if (drawingFiles.length === 0) {
-    return { success: 0, failed: 0, errors: ["No supported files found."] };
+    return {
+      success: 0,
+      failed: 0,
+      errors: [t("import.errors.noSupportedFiles")],
+    };
   }
 
   let successCount = 0;
@@ -152,7 +171,13 @@ export const importLegacyFiles = async (
           successCount += result.success;
           failCount += result.failed;
           errors.push(...result.errors);
-          if (onProgress) onProgress(fileIndex, result.failed > 0 ? "error" : "success", 100, result.failed > 0 ? result.errors.join("\n") : undefined);
+          if (onProgress)
+            onProgress(
+              fileIndex,
+              result.failed > 0 ? "error" : "success",
+              100,
+              result.failed > 0 ? result.errors.join("\n") : undefined,
+            );
           return;
         }
 
@@ -166,7 +191,7 @@ export const importLegacyFiles = async (
             : [];
 
           if (drawings.length === 0) {
-            throw new Error("Legacy export JSON contains no drawings.");
+            throw new Error(t("import.errors.legacyNoDrawings"));
           }
 
           for (let i = 0; i < drawings.length; i += 1) {
@@ -175,7 +200,7 @@ export const importLegacyFiles = async (
             if (!extracted) {
               failCount += 1;
               errors.push(
-                `${file.name}: drawing ${i + 1}: Invalid structure (missing elements/appState)`
+                `${file.name}: ${t("import.errors.invalidLegacyDrawing", { number: i + 1 })}`,
               );
               continue;
             }
@@ -183,21 +208,34 @@ export const importLegacyFiles = async (
             let collectionId: string | null = null;
             if (targetCollectionId !== null) {
               collectionId = targetCollectionId;
-            } else if (d.collectionId === "trash" || d.collectionName === "Trash") {
+            } else if (
+              d.collectionId === "trash" ||
+              d.collectionName === "Trash"
+            ) {
               collectionId = "trash";
-            } else if (typeof d.collectionName === "string" && d.collectionName.trim()) {
-              collectionId = await collectionResolver.getOrCreateCollectionIdByName(d.collectionName.trim());
+            } else if (
+              typeof d.collectionName === "string" &&
+              d.collectionName.trim()
+            ) {
+              collectionId =
+                await collectionResolver.getOrCreateCollectionIdByName(
+                  d.collectionName.trim(),
+                );
             } else {
               collectionId = null;
             }
 
-            const svg = await makeSvgPreview(extracted.elements, extracted.appState, extracted.files);
+            const svg = await makeSvgPreview(
+              extracted.elements,
+              extracted.appState,
+              extracted.files,
+            );
 
             const payload = {
               name:
                 typeof d.name === "string" && d.name.trim().length > 0
                   ? d.name
-                  : `Imported Drawing ${i + 1}`,
+                  : t("import.defaultNameNumbered", { number: i + 1 }),
               elements: extracted.elements,
               appState: extracted.appState,
               files: extracted.files || null,
@@ -226,14 +264,18 @@ export const importLegacyFiles = async (
           extractDrawingData(parsed)
         ) {
           const mappedOnProgress = onProgress
-            ? (_idx: number, status: UploadStatus, progress: number, error?: string) =>
-                onProgress(fileIndex, status, progress, error)
+            ? (
+                _idx: number,
+                status: UploadStatus,
+                progress: number,
+                error?: string,
+              ) => onProgress(fileIndex, status, progress, error)
             : undefined;
           const result = await importDrawings(
             [file],
             targetCollectionId,
             undefined,
-            mappedOnProgress
+            mappedOnProgress,
           );
           successCount += result.success;
           failCount += result.failed;
@@ -241,7 +283,9 @@ export const importLegacyFiles = async (
           return;
         }
 
-        throw new Error(`Invalid file structure: ${file.name}`);
+        throw new Error(
+          t("import.errors.invalidFileStructure", { name: file.name }),
+        );
       } catch (err: any) {
         console.error(`Failed to import ${file.name}:`, err);
         failCount += 1;
@@ -249,11 +293,11 @@ export const importLegacyFiles = async (
           err?.response?.data?.message ||
           err?.response?.data?.error ||
           err?.message ||
-          "Upload failed";
+          t("import.errors.uploadFailed");
         errors.push(`${file.name}: ${errorMessage}`);
         if (onProgress) onProgress(fileIndex, "error", 0, errorMessage);
       }
-    })
+    }),
   );
 
   if (successCount > 0 && onSuccess) {

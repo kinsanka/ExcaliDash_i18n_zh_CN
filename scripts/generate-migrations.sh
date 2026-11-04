@@ -67,4 +67,3 @@ echo "=== Done! ==="
 echo ""
 echo "Provider migrations are in: ${PROVIDER_MIGRATIONS_DIR}/"
 ls -la "${PROVIDER_MIGRATIONS_DIR}/"
-

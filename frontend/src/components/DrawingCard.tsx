@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { PenTool, Check, Clock } from "lucide-react";
 import type { DrawingSummary, Collection } from "../types";
-import { formatDistanceToNow } from "date-fns";
+import { useLocale } from "../context/useLocale";
+import { formatRelativeTime } from "../i18n/format";
 import clsx from "clsx";
 import { exportDrawingToFile } from "../utils/exportUtils";
 import { StorageManageModal } from "./StorageManageModal";
@@ -59,8 +60,41 @@ export const DrawingCard: React.FC<DrawingCardProps> = ({
   const [showStorageModal, setShowStorageModal] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
-  const { previewSvg, hasEmbeddedImages, buildExportDrawing } =
-    useDrawingPreview(drawing, onPreviewGenerated);
+  const previewContainerRef = useRef<HTMLDivElement>(null);
+  const [shouldLoadPreview, setShouldLoadPreview] = useState(
+    Boolean(drawing.preview),
+  );
+  const { locale, t } = useLocale();
+  const { previewSvg, buildExportDrawing } = useDrawingPreview(
+    drawing,
+    onPreviewGenerated,
+    shouldLoadPreview,
+  );
+
+  useEffect(() => {
+    if (drawing.preview) {
+      setShouldLoadPreview(true);
+      return;
+    }
+
+    setShouldLoadPreview(false);
+    const container = previewContainerRef.current;
+    if (!container || typeof IntersectionObserver === "undefined") {
+      setShouldLoadPreview(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        setShouldLoadPreview(true);
+        observer.disconnect();
+      },
+      { rootMargin: "320px 0px" },
+    );
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [drawing.id, drawing.preview]);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,15 +114,15 @@ export const DrawingCard: React.FC<DrawingCardProps> = ({
     try {
       setIsExporting(true);
       setExportError(null);
-      exportDrawingToFile(await buildExportDrawing());
+      await exportDrawingToFile(await buildExportDrawing());
     } catch (error) {
       console.error("Failed to export drawing", error);
-      setExportError("Failed to export drawing. Please try again.");
+      setExportError(t("drawing.errors.exportFailed"));
       setTimeout(() => setExportError(null), 3000);
     } finally {
       setIsExporting(false);
     }
-  }, [buildExportDrawing]);
+  }, [buildExportDrawing, t]);
 
   useEffect(() => {
     const handleClick = () => setContextMenu(null);
@@ -133,12 +167,12 @@ export const DrawingCard: React.FC<DrawingCardProps> = ({
         className={clsx(
           "drawing-card group relative flex flex-col bg-white dark:bg-neutral-900 rounded-2xl border-2 transition-all duration-200 ease-out",
           !isTrash &&
-            "hover:-translate-y-1 hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:hover:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.2)]",
+            "hover:-translate-y-1 hover:shadow-[3px_3px_0px_0px_rgba(30,41,59,0.9)] dark:hover:shadow-[3px_3px_0px_0px_rgba(255,255,255,0.18)]",
           isTrash &&
-            "shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] opacity-80 grayscale-[0.5]",
+            "shadow-[1.5px_1.5px_0px_0px_rgba(30,41,59,0.9)] dark:shadow-[1.5px_1.5px_0px_0px_rgba(255,255,255,0.15)] opacity-80 grayscale-[0.5]",
           isSelected
-            ? "border-neutral-500 dark:border-neutral-500 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.2)]"
-            : "border-black dark:border-neutral-700 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)]",
+            ? "border-neutral-500 dark:border-neutral-500 shadow-[3px_3px_0px_0px_rgba(30,41,59,0.9)] dark:shadow-[3px_3px_0px_0px_rgba(255,255,255,0.18)]"
+            : "border-slate-800 dark:border-neutral-700 shadow-[1.5px_1.5px_0px_0px_rgba(30,41,59,0.9)] dark:shadow-[1.5px_1.5px_0px_0px_rgba(255,255,255,0.15)]",
         )}
       >
         <div
@@ -152,7 +186,9 @@ export const DrawingCard: React.FC<DrawingCardProps> = ({
             }}
             data-testid={`select-drawing-${drawing.id}`}
             aria-pressed={isSelected}
-            aria-label={`${isSelected ? "Deselect" : "Select"} ${drawing.name}`}
+            aria-label={t(isSelected ? "drawing.deselect" : "drawing.select", {
+              name: drawing.name,
+            })}
             className={clsx(
               "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-200 shadow-sm",
               isSelected
@@ -165,22 +201,21 @@ export const DrawingCard: React.FC<DrawingCardProps> = ({
         </div>
 
         <div
+          ref={previewContainerRef}
           onClick={(e) => !isTrash && onClick(drawing.id, e)}
           className={clsx(
-            "aspect-[16/10] bg-slate-50 dark:bg-neutral-800/30 relative overflow-hidden flex items-center justify-center border-b-2 border-black dark:border-neutral-700 rounded-t-xl transition-colors",
+            "aspect-[16/10] bg-slate-50 dark:bg-neutral-800/30 relative overflow-hidden flex items-center justify-center border-b-2 border-slate-800 dark:border-neutral-700 rounded-t-xl transition-colors",
             !isTrash &&
               "cursor-pointer group-hover:bg-neutral-100/10 dark:group-hover:bg-neutral-850",
             isTrash && "cursor-default",
           )}
         >
           <div className="absolute inset-0 opacity-[0.25] bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] [background-size:24px_24px]"></div>
-
           {previewSvg ? (
             <div
               className={clsx(
                 "w-full h-full p-4 sm:p-5 flex items-center justify-center [&>svg]:w-auto [&>svg]:h-auto [&>svg]:max-w-full [&>svg]:max-h-full [&>svg]:drop-shadow-xs transition-transform duration-550",
-                !hasEmbeddedImages &&
-                  "dark:[&>svg]:invert dark:[&>svg_rect[fill='white']]:opacity-0 dark:[&>svg_rect[fill='#ffffff']]:opacity-0",
+                "drawing-preview",
               )}
               dangerouslySetInnerHTML={{ __html: previewSvg }}
             />
@@ -213,7 +248,7 @@ export const DrawingCard: React.FC<DrawingCardProps> = ({
                   onBlur={() => setIsRenaming(false)}
                   onDragStart={(e) => e.stopPropagation()}
                   onMouseDown={(e) => e.stopPropagation()}
-                  className="w-full px-2 py-1 -ml-2 text-sm sm:text-base font-bold text-slate-900 dark:text-white border-2 border-black dark:border-neutral-600 rounded-lg focus:outline-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] bg-white dark:bg-neutral-800"
+                  className="w-full px-2 py-1 -ml-2 text-sm sm:text-base font-semibold text-slate-900 dark:text-white border-2 border-slate-800 dark:border-neutral-600 rounded-lg focus:outline-none shadow-[1.5px_1.5px_0px_0px_rgba(30,41,59,0.9)] dark:shadow-[1.5px_1.5px_0px_0px_rgba(255,255,255,0.18)] bg-white dark:bg-neutral-800"
                 />
               </form>
             ) : (
@@ -239,7 +274,7 @@ export const DrawingCard: React.FC<DrawingCardProps> = ({
             <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-2.5">
               <p className="text-[10px] sm:text-[11px] font-medium text-slate-400 dark:text-neutral-500 flex items-center gap-1 sm:gap-1.5 shrink-0 whitespace-nowrap">
                 <Clock size={10} className="sm:w-[11px] sm:h-[11px]" />
-                {formatDistanceToNow(drawing.updatedAt)} ago
+                {formatRelativeTime(drawing.updatedAt, locale)}
               </p>
 
               <CollectionPicker

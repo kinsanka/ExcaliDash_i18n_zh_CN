@@ -71,4 +71,3 @@ export const readCsv = (name: string): string[] => {
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0);
 };
-

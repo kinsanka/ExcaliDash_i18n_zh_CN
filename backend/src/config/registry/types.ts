@@ -12,6 +12,7 @@ export interface EnvVarSpec {
     | "Backups"
     | "Update check"
     | "Link sharing"
+    | "AI"
     | "Frontend (build-time)";
   kind: EnvKind;
   /** Human-readable default shown in docs; omit if none. */
@@ -30,4 +31,3 @@ export interface EnvVarSpec {
   /** Consumed outside backend/src (docker entrypoint etc.) — documented, never parsed here. */
   docsOnly?: boolean;
 }
-

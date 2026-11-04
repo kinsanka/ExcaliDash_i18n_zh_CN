@@ -13,6 +13,7 @@ const randomCodeChars = (length: number): string => {
   }
   return out;
 };
+
 const normalizeBootstrapSetupCode = (value: string): string =>
   value
     .toUpperCase()
@@ -22,7 +23,10 @@ const normalizeBootstrapSetupCode = (value: string): string =>
 const hashBootstrapSetupCode = (normalizedCode: string): string =>
   crypto.createHash("sha256").update(normalizedCode, "utf8").digest("hex");
 
-const timingSafeHexCompare = (expectedHex: string, actualHex: string): boolean => {
+const timingSafeHexCompare = (
+  expectedHex: string,
+  actualHex: string,
+): boolean => {
   const expected = Buffer.from(expectedHex, "hex");
   const actual = Buffer.from(actualHex, "hex");
   if (expected.length !== actual.length) return false;
@@ -36,7 +40,7 @@ const generateBootstrapSetupCode = (): string => {
 
 const getBootstrapState = async (
   prisma: PrismaClient,
-  options: { authMode: AuthMode }
+  options: { authMode: AuthMode },
 ) => {
   const [systemConfig, bootstrapUser, activeUsers] = await Promise.all([
     prisma.systemConfig.upsert({
@@ -65,14 +69,17 @@ const getBootstrapState = async (
 
 const shouldRequireBootstrapSetupCode = async (
   prisma: PrismaClient,
-  options: { authMode: AuthMode }
+  options: { authMode: AuthMode },
 ): Promise<boolean> => {
   if (options.authMode === "oidc_enforced") return false;
   if (options.authMode === "disabled") return false;
 
-  const { systemConfig, bootstrapUser, activeUsers } = await getBootstrapState(prisma, {
-    authMode: options.authMode,
-  });
+  const { systemConfig, bootstrapUser, activeUsers } = await getBootstrapState(
+    prisma,
+    {
+      authMode: options.authMode,
+    },
+  );
   return (
     Boolean(systemConfig.authEnabled) &&
     Boolean(bootstrapUser) &&
@@ -93,7 +100,7 @@ type IssueBootstrapSetupCodeParams = {
 };
 
 export const issueBootstrapSetupCodeIfRequired = async (
-  params: IssueBootstrapSetupCodeParams
+  params: IssueBootstrapSetupCodeParams,
 ): Promise<{ issued: boolean; code?: string; expiresAt?: Date }> => {
   const { prisma, ttlMs, authMode, reason } = params;
   if (authMode === "oidc_enforced" || authMode === "disabled") {
@@ -121,7 +128,7 @@ export const issueBootstrapSetupCodeIfRequired = async (
   });
 
   console.log(
-    `[BOOTSTRAP SETUP] One-time admin setup code (${reason}): ${code} (expires ${expiresAt.toISOString()})`
+    `[BOOTSTRAP SETUP] One-time admin setup code (${reason}): ${code} (expires ${expiresAt.toISOString()})`,
   );
 
   return { issued: true, code, expiresAt };
@@ -134,10 +141,13 @@ type VerifyBootstrapSetupCodeParams = {
 };
 
 export const verifyBootstrapSetupCode = async (
-  params: VerifyBootstrapSetupCodeParams
+  params: VerifyBootstrapSetupCodeParams,
 ): Promise<
   | { ok: true }
-  | { ok: false; reason: "missing" | "unavailable" | "expired" | "invalid" | "locked" }
+  | {
+      ok: false;
+      reason: "missing" | "unavailable" | "expired" | "invalid" | "locked";
+    }
 > => {
   const { prisma, providedCode, maxAttempts } = params;
   const systemConfig = await prisma.systemConfig.findUnique({
@@ -149,7 +159,10 @@ export const verifyBootstrapSetupCode = async (
     },
   });
 
-  if (!systemConfig?.bootstrapSetupCodeHash || !systemConfig.bootstrapSetupCodeExpiresAt) {
+  if (
+    !systemConfig?.bootstrapSetupCodeHash ||
+    !systemConfig.bootstrapSetupCodeExpiresAt
+  ) {
     return { ok: false, reason: "unavailable" };
   }
 
@@ -167,7 +180,10 @@ export const verifyBootstrapSetupCode = async (
 
   const normalized = normalizeBootstrapSetupCode(providedCode);
   const providedHash = hashBootstrapSetupCode(normalized);
-  const valid = timingSafeHexCompare(systemConfig.bootstrapSetupCodeHash, providedHash);
+  const valid = timingSafeHexCompare(
+    systemConfig.bootstrapSetupCodeHash,
+    providedHash,
+  );
 
   if (!valid) {
     await prisma.systemConfig.update({

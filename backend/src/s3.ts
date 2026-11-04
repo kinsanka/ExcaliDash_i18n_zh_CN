@@ -38,7 +38,9 @@ const FILE_KEY_PREFIX = config.s3.keyPrefix;
 
 /**
  * Build the canonical S3 object key for a given drawing's image file.
- * Layout: `{prefix}/{userId}/{drawingId}/{fileId}.{ext}`
+ * Legacy/copy layout: `{prefix}/{userId}/{drawingId}/{fileId}.{ext}`.
+ * New uploads add a generation directory so delayed cleanup of an older
+ * object cannot delete bytes uploaded again under the same file id.
  *
  * Including drawingId means duplicating a drawing always produces a
  * separate object (and S3File row), so deleting the original cannot
@@ -49,7 +51,9 @@ export const buildS3Key = (
   drawingId: string,
   fileId: string,
   ext: string,
-): string => `${FILE_KEY_PREFIX}/${userId}/${drawingId}/${fileId}.${ext}`;
+  generation?: string,
+): string =>
+  `${drawingS3Prefix(userId, drawingId)}${generation ? `${generation}/` : ""}${fileId}.${ext}`;
 
 /** Prefix used when listing objects belonging to a single drawing. */
 export const drawingS3Prefix = (userId: string, drawingId: string): string =>
@@ -100,7 +104,7 @@ export const generatePresignedDownloadUrl = async (
   overrides?: {
     contentType?: string;
     contentDisposition?: string;
-  }
+  },
 ): Promise<string> => {
   if (!s3Client || !s3Config) {
     throw new Error("S3 is not configured");
@@ -152,7 +156,7 @@ export const getPublicUrl = (key: string): string => {
  * failure so the caller can render a non-fatal warning.
  */
 export const checkBucketReachable = async (
-  timeoutMs = 3000
+  timeoutMs = 3000,
 ): Promise<{ ok: true } | { ok: false; error: string }> => {
   if (!s3Client || !s3Config) {
     return { ok: false, error: "S3 is not configured" };
@@ -166,12 +170,11 @@ export const checkBucketReachable = async (
     });
     return { ok: true };
   } catch (error) {
-    const message =
-      controller.signal.aborted
-        ? `timed out after ${timeoutMs}ms`
-        : error instanceof Error
-          ? error.message
-          : String(error);
+    const message = controller.signal.aborted
+      ? `timed out after ${timeoutMs}ms`
+      : error instanceof Error
+        ? error.message
+        : String(error);
     return { ok: false, error: message };
   } finally {
     clearTimeout(timer);
@@ -185,7 +188,7 @@ export const checkBucketReachable = async (
 export const uploadBuffer = async (
   key: string,
   body: Buffer,
-  mimeType: string
+  mimeType: string,
 ): Promise<void> => {
   if (!s3Client || !s3Config) {
     throw new Error("S3 is not configured");
@@ -202,11 +205,30 @@ export const uploadBuffer = async (
   await s3Client.send(command);
 };
 
+/** Download an object as raw bytes for server-side backup/export work. */
+export const downloadBuffer = async (key: string): Promise<Buffer> => {
+  if (!s3Client || !s3Config) {
+    throw new Error("S3 is not configured");
+  }
+
+  const response = await s3Client.send(
+    new GetObjectCommand({
+      Bucket: s3Config.bucket,
+      Key: key,
+    }),
+  );
+  if (!response.Body) {
+    throw new Error(`S3 object has no body: ${key}`);
+  }
+
+  return Buffer.from(await response.Body.transformToByteArray());
+};
+
 /**
  * List all objects under a given prefix. Handles pagination automatically.
  */
 export const listS3Objects = async (
-  prefix: string
+  prefix: string,
 ): Promise<Array<{ key: string; size: number }>> => {
   if (!s3Client || !s3Config) {
     throw new Error("S3 is not configured");
@@ -281,4 +303,3 @@ export const deleteS3Object = async (key: string): Promise<void> => {
 
   await s3Client.send(command);
 };
-

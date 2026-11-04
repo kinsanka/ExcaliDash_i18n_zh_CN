@@ -1,7 +1,7 @@
-import React from 'react';
-import { ConfirmModal } from '../../components/ConfirmModal';
-import type { AdminUser } from './types';
-import { useI18n } from '../../context/I18nContext';
+import React from "react";
+import { ConfirmModal } from "../../components/ConfirmModal";
+import type { AdminUser } from "./types";
+import { useLocale } from "../../context/useLocale";
 
 type PasswordResult = {
   email: string;
@@ -25,56 +25,59 @@ export const UserActionModals: React.FC<UserActionModalsProps> = ({
   onCopyPassword,
   onClosePassword,
 }) => {
-  const { t } = useI18n();
-
+  const { t } = useLocale();
   return (
-  <>
-    <ConfirmModal
-      isOpen={Boolean(impersonateTarget)}
-      title={t('admin.startImpersonation')}
-      message={
-        impersonateTarget
-          ? t('admin.impersonationConfirm', { email: impersonateTarget.email })
-          : ''
-      }
-      confirmText={t('admin.impersonate')}
-      onConfirm={() => {
-        if (impersonateTarget) {
-          void onConfirmImpersonation(impersonateTarget);
+    <>
+      <ConfirmModal
+        isOpen={Boolean(impersonateTarget)}
+        title={t("admin.impersonate.title")}
+        message={
+          impersonateTarget
+            ? t("admin.impersonate.message", { email: impersonateTarget.email })
+            : ""
         }
-        onCancelImpersonation();
-      }}
-      onCancel={onCancelImpersonation}
-    />
+        confirmText={t("admin.impersonate.confirm")}
+        onConfirm={() => {
+          if (impersonateTarget) {
+            void onConfirmImpersonation(impersonateTarget);
+          }
+          onCancelImpersonation();
+        }}
+        onCancel={onCancelImpersonation}
+      />
 
-    <ConfirmModal
-      isOpen={Boolean(resetPasswordResult)}
-      title={t('admin.tempPasswordTitle')}
-      message={
-        resetPasswordResult ? (
-          <div className="space-y-3">
-            <div className="text-xs">
-              {t('admin.tempPasswordDesc', { email: resetPasswordResult.email })}
+      <ConfirmModal
+        isOpen={Boolean(resetPasswordResult)}
+        title={t("admin.tempPassword.title")}
+        message={
+          resetPasswordResult ? (
+            <div className="space-y-3">
+              <div className="text-xs">
+                {t("admin.tempPassword.forPrefix")}{" "}
+                <span className="font-bold text-slate-900 dark:text-neutral-100">
+                  {resetPasswordResult.email}
+                </span>
+                {t("admin.tempPassword.forSuffix")}
+              </div>
+              <div className="break-all rounded-xl border-2 border-black bg-white px-3 py-2 text-sm font-semibold tracking-tight text-slate-900 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100">
+                {resetPasswordResult.tempPassword}
+              </div>
             </div>
-            <div className="px-3 py-2 rounded-xl border-2 border-black dark:border-neutral-700 bg-white dark:bg-neutral-900 font-mono text-sm text-slate-900 dark:text-neutral-100 break-all">
-              {resetPasswordResult.tempPassword}
-            </div>
-          </div>
-        ) : (
-          ''
-        )
-      }
-      confirmText={t('admin.copy')}
-      cancelText={t('admin.close')}
-      isDangerous={false}
-      variant="success"
-      onConfirm={() => {
-        if (!resetPasswordResult) return;
-        void onCopyPassword(resetPasswordResult);
-        onClosePassword();
-      }}
-      onCancel={onClosePassword}
-    />
-  </>
+          ) : (
+            ""
+          )
+        }
+        confirmText={t("common.copy")}
+        cancelText={t("common.close")}
+        isDangerous={false}
+        variant="success"
+        onConfirm={() => {
+          if (!resetPasswordResult) return;
+          void onCopyPassword(resetPasswordResult);
+          onClosePassword();
+        }}
+        onCancel={onClosePassword}
+      />
+    </>
   );
 };

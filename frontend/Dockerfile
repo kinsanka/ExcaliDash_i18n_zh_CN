@@ -1,5 +1,5 @@
 # Build stage
-FROM node:20-alpine AS builder
+FROM node:24.22.1-alpine AS builder
 
 WORKDIR /app/frontend
 
@@ -14,30 +14,33 @@ COPY frontend/ ./
 COPY VERSION ../VERSION
 
 # Build arguments
-ARG VITE_APP_VERSION
 ARG VITE_APP_BUILD_LABEL
-ENV VITE_APP_VERSION=$VITE_APP_VERSION
 ENV VITE_APP_BUILD_LABEL=$VITE_APP_BUILD_LABEL
-ENV NODE_OPTIONS=--max-old-space-size=3072
 
 # Build the application
 RUN npm run build
 
 # Production stage
-FROM nginx:alpine
+FROM nginxinc/nginx-unprivileged:alpine
+
+# Apply Alpine security fixes that may postdate the nginx base image.
+# Refresh the package layer when the image's build label changes.
+USER root
+ARG VITE_APP_BUILD_LABEL
+RUN : "${VITE_APP_BUILD_LABEL}" && apk upgrade --no-cache
+USER nginx
 
 # Copy nginx config template (will be processed at runtime)
-COPY frontend/nginx.conf.template /etc/nginx/nginx.conf.template
+COPY --chown=nginx:nginx --chmod=0444 frontend/nginx.conf.template /etc/nginx/nginx.conf.template
 
 # Copy entrypoint script
-COPY frontend/docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
+COPY --chown=nginx:nginx --chmod=0555 frontend/docker-entrypoint.sh /docker-entrypoint.sh
 
 # Copy built application from builder
 COPY --from=builder /app/frontend/dist /usr/share/nginx/html
 
-EXPOSE 80
+EXPOSE 80 8080
 
 # Use custom entrypoint to process nginx config template
 ENTRYPOINT ["/docker-entrypoint.sh"]
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["nginx", "-c", "/tmp/nginx.conf", "-g", "daemon off;"]

@@ -92,6 +92,7 @@ const hashString = (input: string): number => {
   }
   return hash >>> 0;
 };
+
 const getCryptoObject = (): Crypto | undefined =>
   typeof globalThis !== "undefined"
     ? globalThis.crypto || (globalThis as any).msCrypto

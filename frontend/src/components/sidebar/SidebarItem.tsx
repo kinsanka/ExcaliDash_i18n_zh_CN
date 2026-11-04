@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import clsx from "clsx";
+import { useLocale } from "../../context/useLocale";
 
 interface SidebarItemProps {
   id: string | null;
@@ -34,6 +35,7 @@ export const SidebarItem: React.FC<SidebarItemProps> = ({
   onEditBlur,
   onDrop,
 }) => {
+  const { t } = useLocale();
   const [isDragOver, setIsDragOver] = useState(false);
 
   return (
@@ -45,7 +47,8 @@ export const SidebarItem: React.FC<SidebarItemProps> = ({
             type="text"
             value={editValue}
             onChange={(e) => onEditChange?.(e.target.value)}
-            className="w-full px-3 py-2 text-sm bg-white dark:bg-neutral-800 border-2 border-black dark:border-neutral-700 rounded-lg shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] outline-none font-bold text-slate-900 dark:text-white"
+            aria-label={t("collection.name")}
+            className="ui-input w-full font-medium"
             onBlur={onEditBlur}
           />
         </form>
@@ -73,10 +76,10 @@ export const SidebarItem: React.FC<SidebarItemProps> = ({
             onDrop?.(e, id);
           }}
           className={clsx(
-            "w-full flex items-center gap-3 px-3 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 border-2 group cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:focus-visible:ring-2 dark:focus-visible:ring-neutral-500",
+            "w-full flex items-center gap-3 px-3 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 border-2 group cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:focus-visible:ring-2 dark:focus-visible:ring-neutral-500",
             isActive || isDragOver
-              ? "bg-indigo-50 dark:bg-neutral-800 text-indigo-900 dark:text-neutral-200 border-black dark:border-neutral-700 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] -translate-y-0.5"
-              : "text-slate-600 dark:text-neutral-400 border-transparent hover:bg-slate-50 dark:hover:bg-neutral-800 hover:border-black dark:hover:border-neutral-700 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:hover:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] hover:-translate-y-0.5",
+              ? "bg-indigo-50 dark:bg-neutral-800 text-indigo-900 dark:text-neutral-200 border-slate-800 dark:border-neutral-700 shadow-[1.5px_1.5px_0px_0px_rgba(30,41,59,0.9)] dark:shadow-[1.5px_1.5px_0px_0px_rgba(255,255,255,0.18)] -translate-y-0.5"
+              : "text-slate-600 dark:text-neutral-400 border-transparent hover:bg-slate-50 dark:hover:bg-neutral-800 hover:border-slate-800 hover:shadow-[1.5px_1.5px_0px_0px_rgba(30,41,59,0.9)] dark:hover:shadow-[1.5px_1.5px_0px_0px_rgba(255,255,255,0.18)] hover:-translate-y-0.5",
           )}
         >
           <span
@@ -89,7 +92,9 @@ export const SidebarItem: React.FC<SidebarItemProps> = ({
           >
             {icon}
           </span>
-          <span className="min-w-0 flex-1 text-left font-bold">{label}</span>
+          <span className="min-w-0 flex-1 truncate text-left font-semibold">
+            {label}
+          </span>
           {extraAction && (
             <div className="flex items-center gap-1 flex-shrink-0">
               {extraAction}
@@ -100,4 +105,3 @@ export const SidebarItem: React.FC<SidebarItemProps> = ({
     </div>
   );
 };
-

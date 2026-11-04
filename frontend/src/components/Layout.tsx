@@ -1,14 +1,15 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
-import { Menu, X } from 'lucide-react';
-import { Sidebar } from './Sidebar';
-import { Logo } from './Logo';
-import { UploadStatus } from './UploadStatus';
-import { ImpersonationBanner } from './ImpersonationBanner';
-import { UpdateBanner } from './UpdateBanner';
-import type { Collection } from '../types';
-import clsx from 'clsx';
+import React, { useState, useRef, useEffect } from "react";
+import { useLocation } from "react-router-dom";
+import { Menu, X } from "lucide-react";
+import { Sidebar } from "./Sidebar";
+import { Logo } from "./Logo";
+import { UploadStatus } from "./UploadStatus";
+import { ImpersonationBanner } from "./ImpersonationBanner";
+import { UpdateBanner } from "./UpdateBanner";
+import type { Collection } from "../types";
+import clsx from "clsx";
 import { displayFontFamily } from "../utils/displayFont";
+import { useLocale } from "../context/useLocale";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -29,9 +30,10 @@ export const Layout: React.FC<LayoutProps> = ({
   onCreateCollection,
   onEditCollection,
   onDeleteCollection,
-  onDrop
+  onDrop,
 }) => {
   const location = useLocation();
+  const { t } = useLocale();
   const [sidebarWidth, setSidebarWidth] = useState(260);
   const [isResizing, setIsResizing] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -39,7 +41,9 @@ export const Layout: React.FC<LayoutProps> = ({
   const sidebarRef = useRef<HTMLDivElement>(null);
   const startXRef = useRef(0);
   const startWidthRef = useRef(0);
-  const resizeMouseMoveHandlerRef = useRef<((e: MouseEvent) => void) | null>(null);
+  const resizeMouseMoveHandlerRef = useRef<((e: MouseEvent) => void) | null>(
+    null,
+  );
   const resizeMouseUpHandlerRef = useRef<(() => void) | null>(null);
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -49,55 +53,67 @@ export const Layout: React.FC<LayoutProps> = ({
     startWidthRef.current = sidebarWidth;
 
     if (resizeMouseMoveHandlerRef.current) {
-      document.removeEventListener('mousemove', resizeMouseMoveHandlerRef.current);
+      document.removeEventListener(
+        "mousemove",
+        resizeMouseMoveHandlerRef.current,
+      );
     }
     if (resizeMouseUpHandlerRef.current) {
-      document.removeEventListener('mouseup', resizeMouseUpHandlerRef.current);
+      document.removeEventListener("mouseup", resizeMouseUpHandlerRef.current);
     }
 
     const handleMouseMove = (e: MouseEvent) => {
       const diff = e.clientX - startXRef.current;
-      const newWidth = Math.max(200, Math.min(600, startWidthRef.current + diff));
+      const newWidth = Math.max(
+        200,
+        Math.min(600, startWidthRef.current + diff),
+      );
       setSidebarWidth(newWidth);
     };
 
     const handleMouseUp = () => {
       setIsResizing(false);
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
       resizeMouseMoveHandlerRef.current = null;
       resizeMouseUpHandlerRef.current = null;
     };
 
     resizeMouseMoveHandlerRef.current = handleMouseMove;
     resizeMouseUpHandlerRef.current = handleMouseUp;
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
   };
 
   useEffect(() => {
     return () => {
       if (resizeMouseMoveHandlerRef.current) {
-        document.removeEventListener('mousemove', resizeMouseMoveHandlerRef.current);
+        document.removeEventListener(
+          "mousemove",
+          resizeMouseMoveHandlerRef.current,
+        );
         resizeMouseMoveHandlerRef.current = null;
       }
       if (resizeMouseUpHandlerRef.current) {
-        document.removeEventListener('mouseup', resizeMouseUpHandlerRef.current);
+        document.removeEventListener(
+          "mouseup",
+          resizeMouseUpHandlerRef.current,
+        );
         resizeMouseUpHandlerRef.current = null;
       }
     };
   }, []);
 
   useEffect(() => {
-    const mq = window.matchMedia('(max-width: 1024px)');
+    const mq = window.matchMedia("(max-width: 1024px)");
     const sync = () => {
       setIsMobile(mq.matches);
       setIsSidebarOpen(!mq.matches);
     };
 
     sync();
-    mq.addEventListener('change', sync);
-    return () => mq.removeEventListener('change', sync);
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
   }, []);
 
   useEffect(() => {
@@ -113,18 +129,29 @@ export const Layout: React.FC<LayoutProps> = ({
             <div className="h-16 flex-shrink-0 flex items-center px-4 border-b border-black/5 dark:border-white/5 bg-white/50 dark:bg-neutral-900/50 backdrop-blur-md">
               <button
                 type="button"
-                onClick={() => setIsSidebarOpen(v => !v)}
-                className="inline-flex items-center justify-center h-11 w-11 rounded-xl border-2 border-black dark:border-neutral-700 bg-white/90 dark:bg-neutral-900/90 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] text-slate-900 dark:text-neutral-200 hover:-translate-y-0.5 transition-all active:translate-y-0 active:shadow-none"
-                title={isSidebarOpen ? 'Close menu' : 'Open menu'}
-                aria-label={isSidebarOpen ? 'Close menu' : 'Open menu'}
+                onClick={() => setIsSidebarOpen((v) => !v)}
+                className="ui-icon-button h-11 w-11"
+                title={
+                  isSidebarOpen ? t("layout.closeMenu") : t("layout.openMenu")
+                }
+                aria-label={
+                  isSidebarOpen ? t("layout.closeMenu") : t("layout.openMenu")
+                }
               >
                 {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
               </button>
 
               <div className="ml-auto flex items-center gap-2">
                 <Logo className="w-8 h-8" />
-                <span className="text-xl text-slate-900 dark:text-white mt-1" style={{ fontFamily: displayFontFamily }}>ExcaliDash</span>
-                <span className="text-[10px] font-bold text-red-500 mt-2" style={{ fontFamily: 'sans-serif' }}>BETA</span>
+                <span
+                  className="text-xl text-slate-900 dark:text-white mt-1"
+                  style={{ fontFamily: displayFontFamily }}
+                >
+                  ExcaliDash
+                </span>
+                <span className="mt-2 text-[10px] font-bold text-red-500">
+                  {t("common.beta")}
+                </span>
               </div>
             </div>
 
@@ -139,8 +166,8 @@ export const Layout: React.FC<LayoutProps> = ({
 
           <div
             className={clsx(
-              'fixed inset-0 z-30 bg-neutral-900/20 backdrop-blur-sm transition-opacity duration-150',
-              isSidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+              "fixed inset-0 z-30 bg-neutral-900/20 backdrop-blur-sm transition-opacity duration-150",
+              isSidebarOpen ? "opacity-100" : "opacity-0 pointer-events-none",
             )}
             onClick={() => setIsSidebarOpen(false)}
           />
@@ -148,8 +175,8 @@ export const Layout: React.FC<LayoutProps> = ({
           <aside
             ref={sidebarRef}
             className={clsx(
-              'fixed inset-y-4 left-2 sm:left-4 z-40 bg-white dark:bg-neutral-900 rounded-2xl border-2 border-black dark:border-neutral-700 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] overflow-hidden transition-transform duration-200',
-              isSidebarOpen ? 'translate-x-0' : '-translate-x-[110%]'
+              "fixed inset-y-4 left-2 sm:left-4 z-40 bg-white dark:bg-neutral-900 rounded-2xl border-2 border-slate-800 dark:border-neutral-700 shadow-[1.5px_1.5px_0px_0px_rgba(30,41,59,0.9)] dark:shadow-[1.5px_1.5px_0px_0px_rgba(255,255,255,0.18)] overflow-hidden transition-transform duration-200",
+              isSidebarOpen ? "translate-x-0" : "-translate-x-[110%]",
             )}
             style={{ width: `${sidebarWidth}px` }}
           >
@@ -164,9 +191,9 @@ export const Layout: React.FC<LayoutProps> = ({
             />
 
             <div
-              className={`absolute top-0 right-0 w-1.5 h-full cursor-col-resize bg-transparent hover:bg-indigo-400 dark:hover:bg-indigo-500 transition-all duration-150 ${isResizing ? 'bg-indigo-500 dark:bg-indigo-400 w-2' : ''} group`}
+              className={`absolute top-0 right-0 w-1.5 h-full cursor-col-resize bg-transparent hover:bg-indigo-400 dark:hover:bg-indigo-500 transition-all duration-150 ${isResizing ? "bg-indigo-500 dark:bg-indigo-400 w-2" : ""} group`}
               onMouseDown={handleMouseDown}
-              title="Drag to resize sidebar"
+              title={t("layout.resizeSidebar")}
             >
               <div className="absolute inset-y-0 -left-0.5 -right-0.5 bg-transparent hover:bg-indigo-500/10 dark:hover:bg-indigo-400/10 transition-colors duration-150" />
             </div>
@@ -174,9 +201,9 @@ export const Layout: React.FC<LayoutProps> = ({
         </div>
       ) : (
         <div className="flex gap-3 sm:gap-4 items-start h-full min-w-0">
-          <aside 
+          <aside
             ref={sidebarRef}
-            className="flex-shrink-0 h-full bg-white dark:bg-neutral-900 rounded-2xl border-2 border-black dark:border-neutral-700 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] overflow-hidden z-20 transition-colors duration-200 relative"
+            className="flex-shrink-0 h-full bg-white dark:bg-neutral-900 rounded-2xl border-2 border-slate-800 dark:border-neutral-700 shadow-[1.5px_1.5px_0px_0px_rgba(30,41,59,0.9)] dark:shadow-[1.5px_1.5px_0px_0px_rgba(255,255,255,0.18)] overflow-hidden z-20 transition-colors duration-200 relative"
             style={{ width: `${sidebarWidth}px` }}
           >
             <Sidebar
@@ -188,11 +215,11 @@ export const Layout: React.FC<LayoutProps> = ({
               onDeleteCollection={onDeleteCollection}
               onDrop={onDrop}
             />
-            
+
             <div
-              className={`absolute top-0 right-0 w-1.5 h-full cursor-col-resize bg-transparent hover:bg-indigo-400 dark:hover:bg-indigo-500 transition-all duration-150 ${isResizing ? 'bg-indigo-500 dark:bg-indigo-400 w-2' : ''} group`}
+              className={`absolute top-0 right-0 w-1.5 h-full cursor-col-resize bg-transparent hover:bg-indigo-400 dark:hover:bg-indigo-500 transition-all duration-150 ${isResizing ? "bg-indigo-500 dark:bg-indigo-400 w-2" : ""} group`}
               onMouseDown={handleMouseDown}
-              title="Drag to resize sidebar"
+              title={t("layout.resizeSidebar")}
             >
               <div className="absolute inset-y-0 -left-0.5 -right-0.5 bg-transparent hover:bg-indigo-500/10 dark:hover:bg-indigo-400/10 transition-colors duration-150" />
             </div>

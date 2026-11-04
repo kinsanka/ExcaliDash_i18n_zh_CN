@@ -1,3 +1,5 @@
+import { configureSecuritySettings, resetSecuritySettings } from "../security";
+import { encodeSnapshotField } from "../snapshots/snapshotCodec";
 /**
  * Regression tests for the file save-merge pipeline (backlog B2).
  *
@@ -149,7 +151,11 @@ describe("Drawing file save-merge (B2)", () => {
       },
     });
     expect(row?.storage).toBe("db");
-    expect(Buffer.from(row!.data as Uint8Array).equals(Buffer.from("NEW=", "base64"))).toBe(true);
+    expect(
+      Buffer.from(row!.data as Uint8Array).equals(
+        Buffer.from("NEW=", "base64"),
+      ),
+    ).toBe(true);
   });
 
   it("does not let a blank (tombstoned) incoming entry erase existing content", async () => {
@@ -166,6 +172,20 @@ describe("Drawing file save-merge (B2)", () => {
     const files = await readFiles(drawing.id);
     expect(files["file-a"].dataURL).toBe("data:image/png;base64,GOOD=");
   });
+
+  it.each([undefined, null, 42, {}])(
+    "preserves stored image metadata when incoming dataURL is %j",
+    async (dataURL) => {
+      const stored = fileEntry("file-a", "data:image/png;base64,GOOD=");
+      const drawing = await createDrawing(owner.id, { "file-a": stored });
+      const res = await put(drawing.id, {
+        elements: [],
+        files: { "file-a": { id: "file-a", dataURL, mimeType: "image/png" } },
+      });
+      expect(res.status).toBe(200);
+      expect((await readFiles(drawing.id))["file-a"]).toEqual(stored);
+    },
+  );
 
   it("snapshots the authoritative in-transaction state and bumps version", async () => {
     const drawing = await createDrawing(
@@ -192,6 +212,116 @@ describe("Drawing file save-merge (B2)", () => {
     expect(Object.keys(snapFiles)).toEqual(["file-a"]);
   });
 
+  it("reads compressed history through the API and preserves it across a restore", async () => {
+    const drawing = await createDrawing(owner.id, {});
+    const historicalState = {
+      viewBackgroundColor: "#abcdef",
+      selectedElementIds: {},
+      customData: "x".repeat(2000),
+    };
+    const snapshot = await prisma.drawingSnapshot.create({
+      data: {
+        drawingId: drawing.id,
+        version: 1,
+        elements: encodeSnapshotField("[]"),
+        appState: encodeSnapshotField(JSON.stringify(historicalState)),
+        files: encodeSnapshotField("{}"),
+      },
+    });
+    expect(snapshot.appState.startsWith("br1:")).toBe(true);
+    const read = await request(app)
+      .get(`/drawings/${drawing.id}/history/${snapshot.id}`)
+      .set("Authorization", `Bearer ${ownerToken}`);
+    expect(read.status).toBe(200);
+    expect(read.body.appState).toEqual(historicalState);
+    const restore = await agent
+      .post(`/drawings/${drawing.id}/history/${snapshot.id}/restore`)
+      .set("User-Agent", userAgent)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .set(csrfHeaderName, csrfToken)
+      .send({ version: drawing.version });
+    expect(restore.status).toBe(200);
+    expect(restore.body.appState).toEqual(historicalState);
+    expect(
+      (await prisma.drawing.findUniqueOrThrow({ where: { id: drawing.id } }))
+        .appState,
+    ).toBe(JSON.stringify(historicalState));
+  });
+
+  it("rejects corrupt compressed history without creating a backup or changing the drawing", async () => {
+    const drawing = await createDrawing(owner.id, {});
+    const snapshot = await prisma.drawingSnapshot.create({
+      data: {
+        drawingId: drawing.id,
+        version: 1,
+        elements: "br1:not-brotli",
+        appState: "{}",
+        files: "{}",
+      },
+    });
+    const restore = await agent
+      .post(`/drawings/${drawing.id}/history/${snapshot.id}/restore`)
+      .set("User-Agent", userAgent)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .set(csrfHeaderName, csrfToken)
+      .send({ version: drawing.version });
+    expect(restore.status).toBe(500);
+    expect(
+      await prisma.drawingSnapshot.count({ where: { drawingId: drawing.id } }),
+    ).toBe(1);
+    expect(
+      (await prisma.drawing.findUniqueOrThrow({ where: { id: drawing.id } }))
+        .version,
+    ).toBe(drawing.version);
+  });
+
+  it("rejects oversized image saves without replacing existing image data", async () => {
+    const original = fileEntry("file-a");
+    const drawing = await createDrawing(owner.id, { "file-a": original });
+    configureSecuritySettings({ maxDataUrlSize: 128 });
+    try {
+      const response = await put(drawing.id, {
+        version: drawing.version,
+        files: {
+          "file-a": fileEntry(
+            "file-a",
+            `data:image/png;base64,${Buffer.alloc(129).toString("base64")}`,
+          ),
+        },
+      });
+      expect(response.status).toBe(413);
+      expect(await readFiles(drawing.id)).toEqual({ "file-a": original });
+      expect(
+        (await prisma.drawing.findUniqueOrThrow({ where: { id: drawing.id } }))
+          .version,
+      ).toBe(drawing.version);
+    } finally {
+      resetSecuritySettings();
+    }
+  });
+
+  it("accepts the exact decoded-byte image limit even when base64 is longer", async () => {
+    const drawing = await createDrawing(owner.id, {});
+    const dataURL = `data:image/png;base64,${Buffer.alloc(128).toString("base64")}`;
+    configureSecuritySettings({ maxDataUrlSize: 128 });
+    try {
+      const response = await put(drawing.id, {
+        files: { image: fileEntry("image", dataURL) },
+      });
+      expect(response.status).toBe(200);
+      expect((await readFiles(drawing.id)).image.dataURL).toBe(
+        `/api/files/${drawing.id}/image`,
+      );
+      const image = await prisma.drawingFile.findUniqueOrThrow({
+        where: { drawingId_fileId: { drawingId: drawing.id, fileId: "image" } },
+      });
+      expect(image.sizeBytes).toBe(128);
+      expect(Buffer.from(image.data!)).toEqual(Buffer.alloc(128));
+    } finally {
+      resetSecuritySettings();
+    }
+  });
+
   it("returns 409 on a stale version and does not merge", async () => {
     const drawing = await createDrawing(
       owner.id,
@@ -212,4 +342,3 @@ describe("Drawing file save-merge (B2)", () => {
     expect(Object.keys(files)).toEqual(["file-a"]);
   });
 });
-

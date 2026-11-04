@@ -61,4 +61,3 @@ echo "OK   SeaweedFS S3 bucket/object round trip: excalidash-lab"
 
 echo
 echo "Lab smoke checks passed."
-

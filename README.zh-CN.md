@@ -1,229 +1,76 @@
-<img src="readme-assets/logoExcaliDash.png" alt="ExcaliDash Logo" width="80" height="88">
-
 # ExcaliDash 中文版
 
-> 基于 [ZimengXiong/ExcaliDash](https://github.com/ZimengXiong/ExcaliDash) 的中文增强 fork，提供简体中文界面、更新后的 Excalidraw CJK 字体支持，以及可直接部署的 Docker 镜像配置。
+基于 [ZimengXiong/ExcaliDash](https://github.com/ZimengXiong/ExcaliDash) 的中文增强版，当前同步上游正式版 **v0.6.7**，中文发布版本为 **v0.6.7-zh.1**。
 
-[English README](./README.md)
+## 本版更新
 
-## 这个 fork 做了什么
+- 同步官方 v0.6.7，以及此前的图片保存、协作同步、历史恢复、备份和安全修复。
+- 使用集中式语言文件，完整覆盖应用界面；设置中可选择简体中文、English 或 Français。
+- 保留 Excalidraw 官方中文、缺失文案补全和官方 Excalifont CJK 字体资源。
+- 保留中文版更新检查、GitHub API 限流回退和上游正式版进度显示。
+- 保留已有迁移文件的内容，新增上游迁移；SQLite 为默认数据库，继续支持 PostgreSQL。
+- Docker 镜像支持 linux/amd64 和 linux/arm64，两端镜像验证通过后一起更新 latest。
 
-这个版本主要面向想直接使用中文界面的用户，而不是自己长期维护 patch。
+## 安装
 
-- 主流程已支持简体中文
-- 已同步上游正式版 `v0.6.0`
-- Excalidraw 已升级到 `0.18.1`
-- 已接入 Excalidraw 官方样式和 CJK 字体支持
-- `docker-compose.prod.yml` 默认使用本 fork 的镜像名
-- 保留了与上游接近的项目结构，便于后续同步
-
-项目关系：
-
-- 上游项目：[ZimengXiong/ExcaliDash](https://github.com/ZimengXiong/ExcaliDash)
-- 当前 fork：`kinsanka/ExcaliDash_i18n_zh_CN`
-
-## 功能概览
-
-- 持久化保存 Excalidraw 图稿
-- 集合管理、搜索、拖拽整理
-- 图稿导出 / 导入备份
-- 实时协作
-- 可选本地认证与 OIDC
-- 分享给内部用户或外部链接访问
-- 集合共享与“分享给我的”隐藏功能
-- 图片独立存储、保存冲突自动协调和离开页面前补发保存
-- 主题、语言、排序、网格步长等用户偏好持久化
-- 可选 SQLite 或 PostgreSQL 数据库
-
-## 快速开始
-
-前提：
-
-- Docker
-- Docker Compose v2
-
-推荐直接使用 Docker Hub 镜像部署。
+需要 Docker 和 Docker Compose v2。
 
 ```bash
-# 下载生产部署 compose 文件
 curl -OL https://raw.githubusercontent.com/kinsanka/ExcaliDash_i18n_zh_CN/main/docker-compose.prod.yml
-
-# 拉取镜像
-docker compose -f docker-compose.prod.yml pull
-
-# 启动
-docker compose -f docker-compose.prod.yml up -d
+APP_TAG=v0.6.7-zh.1 docker compose -f docker-compose.prod.yml pull
+APP_TAG=v0.6.7-zh.1 docker compose -f docker-compose.prod.yml up -d
 ```
 
-启动后访问：
+访问 `http://localhost:6767`。默认镜像为：
 
-- `http://localhost:6767`
+- `kinsanka/excalidash-backend:v0.6.7-zh.1`
+- `kinsanka/excalidash-frontend:v0.6.7-zh.1`
 
-本 fork 默认镜像：
+Compose 支持原有 `APP_TAG`、`BACKEND_IMAGE`、`FRONTEND_IMAGE`，也支持上游 `EXCALIDASH_TAG`（APP_TAG 优先）。需要持续固定版本时，在部署目录的 `.env` 中设置 `APP_TAG=v0.6.7-zh.1`。
 
-```yaml
-backend: kinsanka/excalidash-backend:latest
-frontend: kinsanka/excalidash-frontend:latest
-```
+## 从 v0.6.0 中文版升级
 
-如果你想固定版本，建议显式指定 tag：
+1. 记录当前镜像版本，保留原有 Compose、环境变量和数据库连接配置。
+2. 在应用设置中导出 `.excalidash` 备份；备份生产数据库或后端数据卷，包含持久化密钥。使用外部对象存储时也应保留对应文件。
+3. 优先使用备份副本在独立实例中演练升级，再更新正式实例。
+4. 拉取两个组件的同一固定版本，并重建容器。容器启动会应用新增数据库迁移。
+5. 确认健康检查、旧图稿中的图片、历史版本、分享访问和中文设置正常。
 
 ```bash
-APP_TAG=v0.6.0-zh.5 docker compose -f docker-compose.prod.yml pull
-APP_TAG=v0.6.0-zh.5 docker compose -f docker-compose.prod.yml up -d
+APP_TAG=v0.6.7-zh.1 docker compose -f docker-compose.prod.yml pull
+APP_TAG=v0.6.7-zh.1 docker compose -f docker-compose.prod.yml up -d
+APP_TAG=v0.6.7-zh.1 docker compose -f docker-compose.prod.yml logs backend --tail=100
 ```
 
-## 常用部署说明
+保持原有项目名、后端数据卷和挂载目录。不要在升级时执行 `docker compose down -v`。
 
-### 1. Secrets
+本次升级包含数据库结构更新。回退时应恢复升级前的数据库/文件备份，并恢复旧镜像，不能只切回旧镜像后继续使用已升级的数据库。
 
-生产环境建议显式设置：
+如果旧数据卷由 root 拥有，新的非 root 容器可能无法写入；请在备份后确保挂载目录可由 UID 1001 读写。不要使用删除数据卷的方式解决权限问题。
 
-- `JWT_SECRET`
-- `CSRF_SECRET`
+## 配置和开发
 
-否则单实例部署虽然可以自动生成，但迁移和多实例时不够稳。
+继续沿用原有的 JWT_SECRET、CSRF_SECRET、FRONTEND_URL、AUTH_MODE 和数据库配置。SQLite 和 PostgreSQL 之间的切换不会自动搬迁已有数据。
 
-### 2. 反向代理
+上游部署文档位于 [Docker 部署](https://excalidash.xyz/deploy/docker)和[配置参考](https://excalidash.xyz/reference/environment)。其中的官方镜像名应替换为本仓库的镜像名和中文发布标签。
 
-如果你通过 Nginx、Traefik 或其他代理对外提供服务，重点关注：
-
-- `FRONTEND_URL`
-- `TRUST_PROXY`
-
-只有在你确信请求一定经过可信代理，并且代理正确设置转发头时，才把 `TRUST_PROXY` 改成 `1` 或其他 hop 数。
-
-### 3. 数据存储位置
-
-当前默认使用 Docker volume 保存后端数据：
-
-- 数据库路径：`/app/prisma/dev.db`
-- Compose 挂载：`backend-data:/app/prisma`
-
-也就是说图稿、缩略图、文件数据主要都保存在 SQLite 数据库里，不是默认散落在宿主机目录。
-
-如果只是重建容器，数据通常不会丢；真正危险的是：
-
-- `docker compose down -v`
-- 手动删除 volume
-- 把挂载路径切换到一个新的空目录
-
-### 4. 数据库类型
-
-支持 SQLite 和 PostgreSQL 两种数据库。默认配置仍使用 SQLite，已有部署升级后不需要改动：
-
-```yaml
-environment:
-  - DATABASE_PROVIDER=sqlite
-  - DATABASE_URL=file:/app/prisma/dev.db
-```
-
-如需使用 PostgreSQL，请在首次启动前改为：
-
-```yaml
-environment:
-  - DATABASE_PROVIDER=postgresql
-  - DATABASE_URL=postgresql://user:password@host:5432/excalidash
-```
-
-容器启动时会自动选择对应的 Prisma 迁移。切换数据库类型不会自动迁移旧数据，现有 SQLite 图稿需要另行导出和迁移。
-
-## 升级
-
-如果你使用的是 `docker-compose.prod.yml`，升级方式：
+使用 Node.js 24.22.1 或更新的兼容版本和 npm：
 
 ```bash
-docker compose -f docker-compose.prod.yml pull
-docker compose -f docker-compose.prod.yml up -d
+npm ci
+npm run install:all
+npm run build
+npm run check
+npm --prefix frontend run test:unit
+npm --prefix backend test
 ```
 
-如果要更干净地重启：
+## 发布
 
-```bash
-docker compose -f docker-compose.prod.yml down
-docker compose -f docker-compose.prod.yml pull
-docker compose -f docker-compose.prod.yml up -d
-```
+`VERSION` 保持上游基础版本 `0.6.7`，中文修订号通过 `v0.6.7-zh.N` 标签和镜像构建标识注入。中文发布仅使用本仓库的 Docker Hub 镜像，不向上游命名空间推送。
 
-注意：
-
-- 不要随便加 `-v`，否则会删掉后端持久化数据
-- 生产环境建议固定版本 tag，不建议长期只用 `latest`
-
-## 备份
-
-至少建议定期把当前 Docker volume 里的数据库备份出来。
-
-例如：
-
-```bash
-docker compose down
-mkdir D:\backup\excalidash
-docker run --rm -v excalidash_backend-data:/from -v D:\backup\excalidash:/to alpine sh -c "cp -a /from/. /to/"
-docker compose up -d
-```
-
-这样至少会把数据库和相关 secret 文件备份到本地目录。
-
-## 本地开发
-
-如果你想基于源码本地跑：
-
-```bash
-git clone https://github.com/kinsanka/ExcaliDash_i18n_zh_CN.git
-cd ExcaliDash_i18n_zh_CN
-docker compose up -d --build
-```
-
-或者分别启动前后端：
-
-前端：
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-后端：
-
-```bash
-cd backend
-npm install
-cp .env.example .env
-npm run dev
-```
-
-## GitHub Actions
-
-这个 fork 当前有两类 Actions：
-
-- 测试流程：自动跑后端、前端、E2E 和安全测试
-- Docker 发布流程：自动构建并发布 Docker Hub 镜像
-
-如果你是仓库维护者，需要在 GitHub 仓库里配置：
-
-- `DOCKERHUB_USERNAME`
-- `DOCKERHUB_TOKEN`
-
-然后就可以手动触发镜像发布 workflow。
-
-## 适合谁用
-
-适合：
-
-- 想直接部署中文界面的 ExcaliDash 用户
-- 想用更新版 Excalidraw CJK 支持的用户
-- 希望通过 Docker 镜像直接部署的用户
-
-不适合：
-
-- 只想使用原汁原味上游版本的用户
-- 不希望维护 fork 差异的团队
-
-如果你更在意和上游保持完全一致，请直接使用上游仓库。
+仓库需要已有的 `DOCKERHUB_USERNAME` 和 `DOCKERHUB_TOKEN` Actions secrets。CI 检查通过后推送中文发布标签，即可构建并验证镜像。GitHub 发布说明在镜像发布成功后发布。
 
 ## 致谢
 
-- 原始项目：[ZimengXiong/ExcaliDash](https://github.com/ZimengXiong/ExcaliDash)
-- Excalidraw 与其贡献者：[npm/@excalidraw/excalidraw](https://www.npmjs.com/package/@excalidraw/excalidraw)
+感谢原项目和 Excalidraw 的贡献者，以及 @3zmana 的集中式 i18n 工作。本中文版在该翻译框架基础上补全简体中文。

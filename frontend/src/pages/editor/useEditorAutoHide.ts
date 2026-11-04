@@ -1,47 +1,19 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
-export const useEditorAutoHide = (drawingId: string | undefined) => {
-  const storageKey = useMemo(
-    () => (drawingId ? `excalidash:editor:${drawingId}:autoHideEnabled` : null),
-    [drawingId],
-  );
+export const useEditorAutoHide = (
+  drawingId: string | undefined,
+  defaultEnabled = false,
+) => {
+  const [autoHideEnabled, setAutoHideEnabled] = useState(defaultEnabled);
 
-  const getStoredAutoHideEnabled = useCallback((): boolean => {
-    if (!storageKey) return true;
-    try {
-      const raw = window.localStorage.getItem(storageKey);
-      if (raw === null) return true;
-      return raw === "1" || raw === "true";
-    } catch {
-      return true;
-    }
-  }, [storageKey]);
-
-  const [autoHideEnabled, setAutoHideEnabled] = useState(
-    getStoredAutoHideEnabled,
-  );
-
+  // The toolbar toggle applies to the current visit. Old per-drawing storage
+  // must not override the user's global preference on later visits.
   useEffect(() => {
-    setAutoHideEnabled(getStoredAutoHideEnabled());
-  }, [getStoredAutoHideEnabled]);
-
-  const setAndStoreAutoHideEnabled = useCallback(
-    (next: boolean) => {
-      setAutoHideEnabled(next);
-      if (storageKey) {
-        try {
-          window.localStorage.setItem(storageKey, next ? "1" : "0");
-        } catch {
-          // Ignore storage errors in restricted browser contexts.
-        }
-      }
-    },
-    [storageKey],
-  );
+    setAutoHideEnabled(defaultEnabled);
+  }, [defaultEnabled, drawingId]);
 
   return {
     autoHideEnabled,
-    setAutoHideEnabled: setAndStoreAutoHideEnabled,
+    setAutoHideEnabled,
   };
 };
-

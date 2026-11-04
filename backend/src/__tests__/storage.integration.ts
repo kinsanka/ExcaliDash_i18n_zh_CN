@@ -22,6 +22,7 @@ import { StringValue } from "ms";
 import { PrismaClient } from "../generated/client";
 import { config } from "../config";
 import { getTestPrisma, setupTestDb, cleanupTestDb } from "./testUtils";
+import { encodeSnapshotField } from "../snapshots/snapshotCodec";
 
 describe("Storage management routes", () => {
   const userAgent = "vitest-storage";
@@ -49,7 +50,7 @@ describe("Storage management routes", () => {
       elements?: any[];
       files?: Record<string, any>;
       version?: number;
-    } = {}
+    } = {},
   ) => {
     return prisma.drawing.create({
       data: {
@@ -70,11 +71,7 @@ describe("Storage management routes", () => {
     created: Date.now(),
   });
 
-  const imageElement = (
-    elId: string,
-    fileId: string,
-    isDeleted = false
-  ) => ({
+  const imageElement = (elId: string, fileId: string, isDeleted = false) => ({
     id: elId,
     type: "image",
     x: 0,
@@ -103,9 +100,7 @@ describe("Storage management routes", () => {
     // CSRF middleware rejects unauth'd state-changing requests; obtain a
     // token once and reuse it on every mutating call.
     agent = request.agent(app);
-    const csrfRes = await agent
-      .get("/csrf-token")
-      .set("User-Agent", userAgent);
+    const csrfRes = await agent.get("/csrf-token").set("User-Agent", userAgent);
     csrfHeaderName = csrfRes.body.header;
     csrfToken = csrfRes.body.token;
   });
@@ -147,6 +142,90 @@ describe("Storage management routes", () => {
   });
 
   describe("POST /drawings/:id/trim", () => {
+    it.each([false, true])(
+      "keeps historical image bytes during trim (compressed=%s)",
+      async (compressed) => {
+        const drawing = await createDrawing(owner.id, {
+          name: "Historical Image",
+          elements: [imageElement("deleted", "historical", true)],
+          files: { historical: fileEntry("historical") },
+        });
+        const bytes = Buffer.from([1, 2, 3, 4]);
+        await prisma.drawingFile.create({
+          data: {
+            drawingId: drawing.id,
+            fileId: "historical",
+            storage: "db",
+            data: bytes,
+            mimeType: "image/png",
+            sizeBytes: bytes.length,
+          },
+        });
+        await prisma.drawingFile.create({
+          data: {
+            drawingId: drawing.id,
+            fileId: "unreferenced",
+            storage: "db",
+            data: bytes,
+            mimeType: "image/png",
+            sizeBytes: bytes.length,
+          },
+        });
+        const snapshot = await prisma.drawingSnapshot.create({
+          data: {
+            drawingId: drawing.id,
+            version: 1,
+            appState: "{}",
+            elements: encodeSnapshotField(
+              JSON.stringify([imageElement("old", "historical")]),
+              compressed,
+            ),
+            files: encodeSnapshotField(
+              JSON.stringify({
+                historical: {
+                  ...fileEntry("historical"),
+                  dataURL: `/api/files/${drawing.id}/historical`,
+                  description: "x".repeat(1000),
+                },
+              }),
+              compressed,
+            ),
+          },
+        });
+        if (compressed) expect(snapshot.files).toMatch(/^br1:/);
+        const res = await agent
+          .post(`/drawings/${drawing.id}/trim`)
+          .set("User-Agent", userAgent)
+          .set(csrfHeaderName, csrfToken)
+          .set("Authorization", `Bearer ${ownerToken}`)
+          .send({ confirmName: drawing.name });
+        expect(res.status).toBe(200);
+        expect(
+          await prisma.drawingFile.count({
+            where: { drawingId: drawing.id, fileId: "unreferenced" },
+          }),
+        ).toBe(0);
+        const image = await agent
+          .get(`/files/${drawing.id}/historical`)
+          .set("Authorization", `Bearer ${ownerToken}`);
+        expect(image.status).toBe(200);
+        expect(Buffer.from(image.body).equals(bytes)).toBe(true);
+        const restore = await agent
+          .post(`/drawings/${drawing.id}/history/${snapshot.id}/restore`)
+          .set("User-Agent", userAgent)
+          .set(csrfHeaderName, csrfToken)
+          .set("Authorization", `Bearer ${ownerToken}`)
+          .send({});
+        expect(restore.status).toBe(200);
+        expect(
+          (
+            await agent
+              .get(`/files/${drawing.id}/historical`)
+              .set("Authorization", `Bearer ${ownerToken}`)
+          ).status,
+        ).toBe(200);
+      },
+    );
     it("removes deleted elements and orphan file entries, bumps version", async () => {
       const drawing = await createDrawing(owner.id, {
         name: "Trim Me",
@@ -215,6 +294,56 @@ describe("Storage management routes", () => {
   });
 
   describe("DELETE /drawings/:id/files/orphans", () => {
+    it("removes orphan scene entries while retaining bytes needed by compressed history", async () => {
+      const drawing = await createDrawing(owner.id, {
+        name: "History Cleanup",
+        files: { historical: fileEntry("historical") },
+      });
+      const bytes = Buffer.from([1, 2, 3, 4]);
+      await prisma.drawingFile.create({
+        data: {
+          drawingId: drawing.id,
+          fileId: "historical",
+          storage: "db",
+          data: bytes,
+          mimeType: "image/png",
+          sizeBytes: bytes.length,
+        },
+      });
+      await prisma.drawingSnapshot.create({
+        data: {
+          drawingId: drawing.id,
+          version: 1,
+          appState: "{}",
+          elements: "[]",
+          files: encodeSnapshotField(
+            JSON.stringify({
+              historical: {
+                ...fileEntry("historical"),
+                dataURL: `/api/files/${drawing.id}/historical`,
+                description: "x".repeat(1000),
+              },
+            }),
+          ),
+        },
+      });
+      const res = await agent
+        .delete(`/drawings/${drawing.id}/files/orphans`)
+        .set("User-Agent", userAgent)
+        .set(csrfHeaderName, csrfToken)
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({ confirmName: drawing.name, fileIds: ["historical"] });
+      expect(res.status).toBe(200);
+      const current = await prisma.drawing.findUniqueOrThrow({
+        where: { id: drawing.id },
+      });
+      expect(JSON.parse(current.files)).toEqual({});
+      const image = await agent
+        .get(`/files/${drawing.id}/historical`)
+        .set("Authorization", `Bearer ${ownerToken}`);
+      expect(image.status).toBe(200);
+      expect(Buffer.from(image.body).equals(bytes)).toBe(true);
+    });
     it("removes the requested fileIds and their soft-deleted elements", async () => {
       const drawing = await createDrawing(owner.id, {
         name: "Orphan Cleanup",
@@ -360,4 +489,3 @@ describe("Storage management routes", () => {
     });
   });
 });
-
