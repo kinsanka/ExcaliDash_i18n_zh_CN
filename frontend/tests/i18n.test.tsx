@@ -5,7 +5,7 @@ import {
   resolveLocale,
   translate,
 } from "../src/i18n";
-import { en } from "../src/i18n/locales/en";
+import { en, type TranslationKey } from "../src/i18n/locales/en";
 import { zhCN } from "../src/i18n/locales/zh-CN";
 
 describe("i18n", () => {
@@ -13,9 +13,30 @@ describe("i18n", () => {
     expect(translate("zh-CN", "sidebar.trash")).toBe("回收站");
   });
 
-  it("falls back to English for keys a locale has not translated yet", () => {
-    expect(zhCN["common.loading"]).toBeUndefined();
-    expect(translate("zh-CN", "common.loading")).toBe(en["common.loading"]);
+  it("provides a non-empty Chinese translation for every English key", () => {
+    expect(Object.keys(zhCN).sort()).toEqual(Object.keys(en).sort());
+    for (const key of Object.keys(en) as TranslationKey[]) {
+      expect(zhCN[key].trim(), key).not.toBe("");
+    }
+    expect(translate("zh-CN", "common.loading")).toBe("加载中…");
+  });
+
+  it("preserves all interpolation placeholders in the Chinese locale", () => {
+    const placeholders = (text: string) =>
+      (text.match(/\{\w+\}/g) ?? []).sort();
+    for (const key of Object.keys(en) as TranslationKey[]) {
+      expect(placeholders(zhCN[key]), key).toEqual(placeholders(en[key]));
+    }
+    expect(translate("zh-CN", "dashboard.moveItemsTo", { count: 3 })).toBe(
+      "将 3 个项目移动到…",
+    );
+    expect(
+      translate("zh-CN", "settings.importCompletedWithErrors", {
+        success: 2,
+        failed: 1,
+        errors: "文件结构无效",
+      }),
+    ).toBe("导入完成，但有部分错误。\n成功：2\n失败：1\n错误：\n文件结构无效");
   });
 
   it("interpolates placeholders and leaves unknown ones untouched", () => {
