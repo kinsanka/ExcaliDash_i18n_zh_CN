@@ -1,6 +1,6 @@
-import type { LocaleMessages, TranslationKey } from "./en";
+import type { LocaleMessages } from "./en";
 
-export const zhCN = {
+export const zhCN: LocaleMessages = {
   "sidebar.library": "资料库",
   "sidebar.allDrawings": "全部图稿",
   "sidebar.sharedWithMe": "与我共享",
@@ -655,4 +655,4 @@ export const zhCN = {
   "import.errors.zipEntryFailed": "导入压缩包条目失败",
   "upload.errors.unsupportedFileType": "不支持的文件类型",
   "upload.errors.unexpected": "上传时发生意外错误",
-} satisfies LocaleMessages & Record<TranslationKey, string>;
+};
